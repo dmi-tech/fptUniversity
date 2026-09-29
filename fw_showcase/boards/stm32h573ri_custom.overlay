@@ -1,0 +1,54 @@
+/*
+ * fw_showcase: DHT11 + alarm motor on the Base Board U16 expansion header.
+ *
+ *   U16-5  PC2  DHT11 DATA   (SPI2 MISO on the board, SPI2 disabled below)
+ *   U16-4  PA2  motor driver (USART2 TX, USART2 disabled below), active high
+ *   U16-10 PB6  I2C1 SCL -> PCF8574 backpack of the 20x4 LCD
+ *   U16-9  PB9  I2C1 SDA -> PCF8574 backpack of the 20x4 LCD
+ *   U16-12 PA10 button      (unchanged, toggles the motor)
+ *
+ * The board devicetree is left untouched; everything showcase specific is here.
+ */
+
+/ {
+	chosen {
+		/delete-property/ zephyr,canbus;
+	};
+
+	dht11: dht11 {
+		compatible = "aosong,dht";
+		/* Open drain: the line is only ever pulled low by the MCU; the
+		 * internal pull-up is weak, add an external 4.7k-10k if the module
+		 * has none. */
+		dio-gpios = <&gpioc 2 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
+	};
+
+	motor_output {
+		compatible = "gpio-leds";
+		/* Motor driver (transistor/MOSFET module) input, high = motor on */
+		motor: motor_0 {
+			gpios = <&gpioa 2 GPIO_ACTIVE_HIGH>;
+			label = "Motor";
+		};
+	};
+
+	aliases {
+		motor0 = &motor;
+		dht0 = &dht11;
+	};
+};
+
+/* Peripherals not used by the showcase */
+&fdcan1 { status = "disabled"; };
+&sdmmc1 { status = "disabled"; };
+&usart1 { status = "disabled"; };
+&usart2 { status = "disabled"; };  /* PA2 is now the motor output */
+&usart6 { status = "disabled"; };
+&sht41  { status = "disabled"; };  /* replaced by the DHT11 */
+&i2c2   { status = "disabled"; };
+&spi2   { status = "disabled"; };  /* ST7920 replaced by the I2C LCD */
+
+/* 20x4 LCD backpack: the PCF8574 is specified for 100 kHz only */
+&i2c1 {
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+};
