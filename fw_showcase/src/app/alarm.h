@@ -27,17 +27,16 @@ enum alarm_event {
     ALARM_EVT_CLEAR,   /* abnormal -> normal */
 };
 
-/* Configure relay 1 (PB5), the motor (PA2) and the button (PA10) */
+/* Configure relay 1 (PB5); call motor_init() first */
 bool alarm_init(void);
 
 /* Feed one DHT11 sample (ok=false when the read failed). Starts/stops the
- * 1 s relay blink and the alarm-driven motor on a state change. */
+ * 1 s relay blink and the alarm-driven motor (motor.h) on a state change. */
 enum alarm_event alarm_update(bool ok, int temp_c, int humi_pct);
 
 bool              alarm_active(void);
 enum alarm_reason alarm_reason(void);
 const char       *alarm_reason_str(enum alarm_reason r);   /* T_HIGH, ... */
 const char       *alarm_reason_text(enum alarm_reason r);  /* LCD text */
-bool              motor_is_on(void);
 
 #endif /* ALARM_H */

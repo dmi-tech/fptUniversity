@@ -4,13 +4,14 @@
 
 Firmware Zephyr RTOS cho board **STM32H573RI** tùy biến. Thiết bị:
 - theo dõi nhiệt độ/độ ẩm bằng DHT11 và hiển thị trên LCD 20x4;
-- có trang web cấu hình tích hợp;
-- gửi dữ liệu qua MQTT (có thể dùng TLS);
-- khi có cảnh báo thì gửi tin RS485, điều khiển relay và motor.
+- có trang web DASHBOARD/cấu hình tích hợp;
+- gửi dữ liệu qua MQTT (có thể dùng TLS), có thể subscribe/publish topic ngay trên web;
+- khi có cảnh báo thì gửi tin RS485, điều khiển relay và motor;
+- motor điều khiển được từ web, RS485, nút nhấn hoặc cảnh báo.
 
 Image được **MCUboot** khởi động và xác thực (chữ ký RSA-2048, chống downgrade).
 
-- Phiên bản firmware: **3.0.0**
+- Phiên bản firmware: **3.1.0**
 - Zephyr: **v4.4.2** (pin trong [`west.yml`](west.yml))
 - Board: `stm32h573ri_custom` (định nghĩa nằm trong [`boards/`](boards))
 
@@ -21,6 +22,8 @@ Image được **MCUboot** khởi động và xác thực (chữ ký RSA-2048, c
 - **LCD ký tự 20x4** (HD44780 qua module I2C PCF8574/PCF8574A). Địa chỉ I2C
   được tự dò: thử 0x27/0x3F trước, sau đó 0x20-0x27 và 0x38-0x3F. Nếu LCD bị
   rút ra, firmware sẽ dò lại mỗi 10 giây.
+- Màn hình khởi động (`fw_showcase <ver>` / `DHT11 + ALARM` / `NET WAIT`) hiện
+  đúng 5 giây, sau đó chuyển sang màn hình trạng thái:
 
   ```text
   IP:192.168.1.50
@@ -28,6 +31,10 @@ Image được **MCUboot** khởi động và xác thực (chữ ký RSA-2048, c
   MQTT:OK   Motor:OFF
   !! TEMP HIGH !!          <- chỉ hiện khi đang cảnh báo
   ```
+
+  Dòng IP hiện IP tĩnh đã lưu cho tới khi Ethernet có link và được cấp địa chỉ.
+  `MQTT:OK` chỉ hiện khi đã kết nối broker và cáp mạng đang cắm. IP và trạng
+  thái MQTT được vẽ lại ngay khi thay đổi; giá trị cảm biến cập nhật mỗi 2 giây.
 
 ### Cảnh báo
 Giá trị được kiểm tra ở **mỗi lần đọc**. Có hysteresis để cảnh báo không bật/tắt
@@ -55,49 +62,86 @@ Khi cảnh báo **kết thúc**:
 
 Các ngưỡng nằm trong [`src/app/alarm.h`](src/app/alarm.h).
 
-### Motor và nút nhấn
-- **Nút PA10** bật/tắt motor bất cứ lúc nào (dùng ngắt, chống dội 50 ms).
-- Motor do **cảnh báo** bật sẽ tự tắt khi cảnh báo kết thúc.
-- Motor do **nút nhấn** bật thì không bao giờ tự tắt.
-- Nếu dùng nút tắt motor trong lúc đang cảnh báo, motor sẽ tắt đến lần cảnh báo
-  kế tiếp.
+### Motor
+Bốn nguồn có thể bật/tắt motor (PA2):
+- **công tắc ON/OFF trên trang web**;
+- dòng **`ON` / `OFF` qua RS485**;
+- **nút PA10**, bấm để đảo trạng thái (dùng ngắt, chống dội 50 ms);
+- **cảnh báo**, khi bắt đầu sẽ bật motor.
 
-### RS485 (chỉ truyền)
-Dùng UART4 ở 9600 8N1, chân điều khiển hướng là PC3. Mỗi tin là một dòng ASCII
-kết thúc bằng `\r\n`:
+Quy tắc:
+- Motor do **cảnh báo** bật sẽ tự tắt khi cảnh báo kết thúc.
+- Motor bật bằng tay (web, RS485 hoặc nút nhấn) thì không bao giờ tự tắt.
+- Tắt bằng tay trong lúc đang cảnh báo thì motor giữ tắt đến lần cảnh báo kế tiếp.
+- Trang web hiển thị nguồn thao tác gần nhất, ví dụ `(by RS485)`.
+
+### RS485 (gửi và nhận)
+Dùng UART4 ở 9600 8N1, chân điều khiển hướng là PC3 (half duplex). Mỗi tin là
+một dòng ASCII kết thúc bằng `\r\n`.
+
+Thiết bị gửi:
 
 ```text
 ALARM #12 T=42C H=30% REASON=T_HIGH
 ALARM #13 T=-- H=-- REASON=SENSOR
 CLEAR #14 T=28C H=45%
+ACK MOTOR ON
 ```
 
 `#N` là số thứ tự tin nhắn. `REASON` là một trong `T_HIGH`, `T_LOW`, `H_HIGH`,
-`H_LOW`, `SENSOR`.
+`H_LOW`, `SENSOR`. Nội dung nhập ở ô RS485 trên web được gửi đi thành một dòng.
+
+Thiết bị nhận (không phân biệt hoa thường, tối đa 63 ký tự): `ON` và `OFF` bật
+và tắt motor, web cập nhật trong vòng 2 giây, thiết bị trả lời `ACK MOTOR ON` /
+`ACK MOTOR OFF`. Một dòng kết thúc khi gặp CR và/hoặc LF, hoặc khi ngừng nhận
+50 ms, nên chỉ cần gõ `ON` hoặc `OFF` trong terminal (ví dụ Hercules) là đủ.
+Các dòng khác bị bỏ qua. Đừng gửi trong lúc thiết bị đang phát.
 
 ### Ethernet, web và MQTT
-- **Ethernet W5500** lấy địa chỉ bằng DHCP. Nếu sau 30 giây không có lease, thiết
-  bị chuyển sang IP tĩnh đã lưu (mặc định `192.168.1.100/24`, gateway
-  `192.168.1.1`).
+- **Ethernet W5500** được bật trong nền nên LCD không phải chờ mạng. Thiết bị lấy
+  địa chỉ bằng DHCP: chờ cắm cáp không giới hạn thời gian, và nếu sau 30 giây kể
+  từ lúc có link vẫn không có lease thì chuyển sang IP tĩnh đã lưu (mặc định
+  `192.168.1.100/24`, gateway `192.168.1.1`).
 - **Web server** chạy ở cổng 80:
   - `/login`: có mật khẩu, chỉ một phiên đăng nhập tại một thời điểm, nhập sai
     thì thời gian chờ tăng dần.
-  - `/config`: thông tin thiết bị và trạng thái cảnh báo/motor/RS485 (tự cập
-    nhật mỗi 5 giây), cài đặt MQTT, đổi mật khẩu web.
+  - `/config` (**DASHBOARD / Device configuration**), tự cập nhật mỗi 2 giây:
+    - *Device Information*: tên, firmware, MAC, IP, chế độ IP, cổng web, cảnh
+      báo, RS485.
+    - *MQTT Settings*: broker, port, client ID, user, password và trạng thái.
+      **Subscribe**: nhập topic rồi bấm nút, 3 tin gần nhất (mỗi tin tối đa 384
+      ký tự) hiện bên dưới (cho phép wildcard, không nhớ sau khi khởi động
+      lại). **Publish**: nhập topic, nội dung và bấm nút (tối đa 128 ký tự);
+      topic được gửi đi đúng như đã gõ, không thêm tiền tố (tối đa 63 ký tự).
+    - *Devices*: `LCD 20x4 Status`, `Sensor DHT11 Status Temperature Humidity`,
+      công tắc ON/OFF của motor, và ô RS485 có nút Send.
+    - *Modify Web Login Password*.
   - `/status`: trả về JSON.
-  - Khi lưu, cấu hình được ghi vào flash rồi thiết bị khởi động lại.
+  - **Save & Apply** chỉ lưu cài đặt MQTT và mật khẩu vào flash rồi khởi động
+    lại thiết bị. Công tắc motor, Send, Subscribe và Publish có tác dụng ngay
+    qua `/api/...` (JSON, cần đăng nhập) và không khởi động lại thiết bị.
 - **MQTT** (3.1.1, QoS 0):
-  - Publish mỗi 60 giây, và publish ngay khi cảnh báo bắt đầu/kết thúc.
+  - Gửi JSON trạng thái tới topic `users/admin@example.com/<NNN>/status` mỗi 30
+    giây, và gửi ngay khi cảnh báo bắt đầu/kết thúc hoặc motor đổi trạng thái.
+    `NNN` là byte cuối của IP thiết bị, đủ 3 chữ số, ví dụ `192.168.1.50` ->
+    `users/admin@example.com/050/status`.
   - Cổng **8883** dùng TLS: chứng chỉ broker được kiểm tra theo ISRG Root X1
     (Let's Encrypt), có SNI. Cổng khác dùng TCP thường.
-  - Tự kết nối lại khi mất kết nối.
+  - Tự kết nối lại khi mất kết nối. Khi rút cáp mạng, phiên MQTT bị ngắt ngay
+    (trạng thái `link down`) thay vì chờ hết keepalive.
 
-Payload MQTT và JSON `/status`:
+Payload trạng thái:
 
 ```json
-{"id":"mini_GW","fw":"3.0.0","temp":28,"humi":45,"sensor_ok":1,
- "alarm":0,"reason":"NONE","motor":0,"cnt":7,"ip":"192.168.1.50"}
+{"id":"Board 050","fw":"3.1.0","temp":28,"humi":45,"sensor_ok":1,
+ "alarm":0,"reason":"NONE","motor":1,"motor_by":"RS485","ip":"192.168.1.50"}
 ```
+
+`id` là `Board NNN` (NNN giống trong status topic, không phải cài đặt Client ID của
+MQTT). `motor_by` là `web`, `RS485`, `button`, `alarm` hoặc rỗng. `/status`
+(web, không cần đăng nhập) trả về các trường như trên nhưng không có `id` và
+`fw`, thêm `cnt` (số lần đọc DHT11). Dữ liệu trên web được cập nhật sau mỗi lần
+đọc DHT11.
 
 ### Lưu cấu hình và khởi động
 - Cấu hình được lưu thành **2 bản trong flash** (`config-a` / `config-b`), mỗi bản
@@ -272,8 +316,9 @@ Log nằm ở SEGGER RTT kênh 0. Có thể đọc bằng:
 1. Cắm dây mạng và cấp nguồn. LCD sẽ hiện địa chỉ IP.
 2. Mở `http://<ip-thiết-bị>/` và đăng nhập bằng mật khẩu mặc định **`123456`**.
 3. Điền phần **MQTT Settings**: broker host, port (`8883` nếu dùng TLS), client
-   ID, topic, user và password. Trên thiết bị mới các trường này để trống, và
-   MQTT sẽ ở trạng thái `not configured` cho đến khi được điền.
+   ID, user và password. Trên thiết bị mới các trường này để trống, và MQTT sẽ ở
+   trạng thái `not configured` cho đến khi được điền. Topic trạng thái không cần
+   cài đặt.
 4. **Đổi mật khẩu web**, rồi nhấn **Save & Apply**. Thiết bị sẽ khởi động lại với
    cấu hình mới.
 
@@ -296,20 +341,22 @@ fptUniversity/fw_showcase/
 └── src/
     ├── main.c               trình tự khởi động và vòng lặp chính
     ├── app/                 logic ứng dụng
-    │   ├── alarm.c/.h         ngưỡng, nháy relay, motor, nút nhấn
+    │   ├── alarm.c/.h         ngưỡng, nháy relay
     │   ├── alarm_notify.c/.h  tin RS485 ALARM/CLEAR
+    │   ├── motor.c/.h         ngõ ra motor, nút PA10, quy tắc ai được tắt/bật
+    │   ├── rs485_cmd.c        thread xử lý lệnh RS485 ON/OFF
     │   ├── app_config.c/.h    cấu hình, lưu flash A/B
     │   ├── app_state.c/.h     trạng thái dùng chung giữa main loop, web, MQTT
     │   └── version.h
     ├── drivers/             driver ngoại vi
     │   ├── dht11.c/.h         DHT11 (driver aosong,dht của Zephyr)
     │   ├── lcd_pcf8574.c/.h   HD44780 20x4 qua PCF8574
-    │   └── rs485.c/.h         UART4 + chân hướng
+    │   └── rs485.c/.h         UART4 + chân hướng, nhận từng dòng
     ├── net/                 mạng
     │   ├── network.c/.h       bật Ethernet, DHCP / IP tĩnh
     │   ├── http.c/.h          hàm hỗ trợ HTTP
-    │   ├── web_server.c       route, đăng nhập, trang cấu hình
-    │   ├── web_pages.h        HTML / CSS
+    │   ├── web_server.c       route, đăng nhập, trang cấu hình, công cụ /api
+    │   ├── web_pages.h        HTML / CSS / JS
     │   ├── mqtt_app.c/.h      thread MQTT client
     │   └── mqtt_ca.h          chứng chỉ gốc TLS (ISRG Root X1)
     ├── system/
@@ -321,9 +368,10 @@ fptUniversity/fw_showcase/
         └── mbedtls_user_config.h   kích thước buffer TLS
 ```
 
-Web server và MQTT client mỗi cái chạy trong một thread riêng
-(`K_THREAD_DEFINE`). Vòng lặp chính đọc cảm biến, xử lý cảnh báo, cập nhật LCD
-và chuyển dữ liệu mới cho web/MQTT qua `app_state`.
+Web server, MQTT client và bộ xử lý lệnh RS485 mỗi cái chạy trong một thread
+riêng (`K_THREAD_DEFINE`). Vòng lặp chính đọc cảm biến, xử lý cảnh báo, cập nhật
+LCD và chuyển mỗi lần đọc mới cho web/MQTT qua `app_state`. Chỉ thread MQTT gọi
+thư viện MQTT; thread web chỉ xếp yêu cầu Subscribe/Publish vào hàng đợi.
 
 ## Giấy phép
 

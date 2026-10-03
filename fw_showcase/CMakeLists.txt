@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(fw_showcase VERSION 3.0.0)
+project(fw_showcase VERSION 3.1.0)
 
 # Headers the Zephyr libraries must see (Mbed TLS user config)
 zephyr_include_directories(src/config)
@@ -21,6 +21,8 @@ target_sources(app PRIVATE
   src/app/alarm_notify.c
   src/app/app_config.c
   src/app/app_state.c
+  src/app/motor.c
+  src/app/rs485_cmd.c
 
   # Peripheral drivers
   src/drivers/dht11.c

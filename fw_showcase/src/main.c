@@ -1,5 +1,6 @@
-/* fw_showcase: DHT11 (PC2) -> 20x4 LCD (PCF8574, I2C1), internal web + MQTT every 60 s,
- * abnormal value -> RS485 alarm + relay 1 blink + motor (PA2, PA10 button).
+/* fw_showcase: DHT11 (PC2) -> 20x4 LCD (PCF8574, I2C1), live web page, MQTT
+ * status every 30 s, abnormal value -> RS485 alarm + relay 1 blink + motor.
+ * Motor (PA2): web switch, RS485 ON/OFF, PA10 button or the alarm.
  * Config stored in flash — load at boot, edit via browser */
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
@@ -12,14 +13,17 @@
 #include "boot_swap.h"
 #include "dht11.h"
 #include "lcd_view.h"
+#include "motor.h"
+#include "mqtt_app.h"
 #include "network.h"
 #include "rs485.h"
 #include "status_led.h"
 #include "version.h"
 
 #define DHT_READ_PERIOD_MS      2000    /* DHT11 needs >= 1 s between reads */
-#define REPORT_PERIOD_MS       60000    /* web / MQTT update period */
+#define REPORT_PERIOD_MS       30000    /* MQTT status period (web: every read) */
 #define ALARM_REPEAT_PERIOD_MS 10000    /* RS485 ALARM repeat while active */
+#define SPLASH_MS               5000    /* boot screen, then the status screen */
 
 /* Load config from flash; fall back to defaults */
 static void load_config(void)
@@ -45,18 +49,24 @@ int main(void)
 
     rs485_init();
     bool dht_ok = dht11_init();
+    motor_init();
     alarm_init();
     lcd_view_init();
 
+    /* Ethernet comes up in the background (DHCP or static per config) */
     network_start();
-    printk("[APP] Running — http://%s/\n\n", g_device_ip);
+
+    /* Boot screen for SPLASH_MS; it also covers the DHT11's ~1 s power-up
+     * delay */
+    status_led_heartbeat_start();
+    int64_t splash_end = k_uptime_get() + SPLASH_MS;
+    while (k_uptime_get() < splash_end) {
+        status_led_heartbeat();
+        k_msleep(20);
+    }
 
     lcd_view_clear();
     lcd_view_show(false, 0, 0);
-    status_led_heartbeat_start();
-
-    /* DHT11 needs ~1 s after power-up before the first read */
-    k_msleep(1000);
 
     int t = 0, h = 0;
     bool have_data = false;
@@ -95,14 +105,18 @@ int main(void)
                 next_repeat = now + ALARM_REPEAT_PERIOD_MS;
             }
 
-            /* Web + MQTT: every 60 s, and at once on an alarm change */
+            /* Web: every read. MQTT: every 30 s and at once on an alarm
+             * change (motor changes are pushed by motor.c). */
+            app_state_update(t, h, ok, have_data);
             if (ev != ALARM_EVT_NONE || now >= next_report) {
                 next_report = now + REPORT_PERIOD_MS;
-                app_state_report(t, h, ok);
+                mqtt_app_publish_now();
             }
 
             lcd_view_retry(now);
             lcd_view_show(have_data, dht11_last_temp_x10(), dht11_last_humi_x10());
+        } else {
+            lcd_view_refresh();
         }
 
         status_led_heartbeat();

@@ -29,7 +29,7 @@ typedef struct {
     char     mqtt_host[64];
     uint16_t mqtt_port;
     char     mqtt_client_id[32];
-    char     mqtt_topic[64];
+    char     mqtt_topic[64];     /* unused since 3.1.0 (status goes to "users/admin@example.com/<NNN>/status"), kept for the flash layout */
     char     mqtt_user[64];
     char     mqtt_pass[256];
     /* Web login */

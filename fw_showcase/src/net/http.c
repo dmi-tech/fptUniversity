@@ -20,6 +20,8 @@ void http_respond(int fd, int code, const char *ctype,
     char hdr[320];
     const char *status = (code == 200) ? "OK" :
                          (code == 302) ? "Found" :
+                         (code == 400) ? "Bad Request" :
+                         (code == 401) ? "Unauthorized" :
                          (code == 403) ? "Forbidden" : "Not Found";
     int hlen = snprintf(hdr, sizeof(hdr),
         "HTTP/1.1 %d %s\r\n"
@@ -42,36 +44,45 @@ void http_redirect(int fd, const char *loc)
     http_send_all(fd, buf, n);
 }
 
-static void url_decode(const char *src, char *dst, size_t max)
+static int hexval(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+/* Decode src[0..len) into dst (max bytes incl. the NUL) */
+static void url_decode(const char *src, size_t len, char *dst, size_t max)
 {
     size_t i = 0;
-    while (*src && i < max - 1) {
+    const char *end = src + len;
+    while (src < end && i < max - 1) {
         if (*src == '+') { dst[i++] = ' '; src++; }
-        else if (*src == '%' && src[1] && src[2]) {
-            char h[3] = {src[1], src[2], 0};
-            dst[i++] = (char)strtol(h, NULL, 16);
+        else if (*src == '%' && end - src >= 3 &&
+                 hexval(src[1]) >= 0 && hexval(src[2]) >= 0) {
+            dst[i++] = (char)(hexval(src[1]) * 16 + hexval(src[2]));
             src += 3;
         } else { dst[i++] = *src++; }
     }
     dst[i] = '\0';
 }
 
-bool http_form_field(const char *body, const char *key, char *out, size_t out_sz)
+/* Extract field from URL-encoded body: "key=value&..." → value */
+bool http_form_field(const char *body, const char *key,
+                        char *out, size_t out_sz)
 {
-    char search[64];
-    snprintf(search, sizeof(search), "%s=", key);
-    const char *p = strstr(body, search);
-    if (!p) { out[0] = '\0'; return false; }
-    p += strlen(search);
-    const char *end = strchr(p, '&');
-    if (!end) end = p + strlen(p);
-    size_t len = (size_t)(end - p);
-    if (len >= out_sz) len = out_sz - 1;
-    char tmp[256] = {0};
-    if (len >= sizeof(tmp)) len = sizeof(tmp) - 1;
-    memcpy(tmp, p, len);
-    url_decode(tmp, out, out_sz);
-    return true;
+    size_t klen = strlen(key);
+    for (const char *p = body; p && *p; p = strchr(p, '&'), p = p ? p + 1 : NULL) {
+        if (strncmp(p, key, klen) == 0 && p[klen] == '=') {
+            p += klen + 1;
+            const char *end = strchr(p, '&');
+            url_decode(p, end ? (size_t)(end - p) : strlen(p), out, out_sz);
+            return true;
+        }
+    }
+    out[0] = '\0';
+    return false;
 }
 
 int http_read_body(int fd, const char *hdr_buf, int hdr_len,

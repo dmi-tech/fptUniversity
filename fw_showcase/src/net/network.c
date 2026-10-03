@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#define DHCP_TIMEOUT_MS 30000   /* after link up, then static fallback */
+
 /* Apply the static IP / netmask / gateway saved in config */
 static void apply_static_ip(struct net_if *iface)
 {
@@ -57,43 +59,63 @@ static void read_mac(struct net_if *iface)
     }
 }
 
-void network_start(void)
+bool network_eth_connected(void)
 {
     struct net_if *iface = net_if_get_default();
 
-    if (iface) {
-        net_if_up(iface);
-        read_mac(iface);
+    return iface && net_if_is_up(iface) && app_state_has_ip();
+}
 
-        /* Wait for PHY carrier/link before requesting an address (up to 8 s) */
-        for (int i = 0; i < 40 && !net_if_is_up(iface); i++) {
-            k_msleep(200);
+/* Static: address applied at once. DHCP: wait for the cable (no limit),
+ * then up to DHCP_TIMEOUT_MS for a lease, else the saved static address. */
+static void net_thread(void *p1, void *p2, void *p3)
+{
+    ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
+
+    struct net_if *iface = net_if_get_default();
+    if (!iface) { printk("[NET] no interface\n"); return; }
+
+    net_if_up(iface);
+    read_mac(iface);
+
+    if (g_cfg.ip_mode == 0) {
+        printk("[NET] DHCP mode — waiting for link...\n");
+        net_dhcpv4_start(iface);
+        while (!net_if_is_up(iface)) {
+            k_msleep(100);
         }
-
-        if (g_cfg.ip_mode == 0) {
-            printk("[NET] DHCP mode — requesting lease...\n");
-            net_dhcpv4_start(iface);
-            for (int i = 0; i < 60; i++) {            /* wait up to 30 s */
-                network_update_ip();
-                if (app_state_has_ip()) break;
-                k_msleep(500);
-            }
-            if (!app_state_has_ip()) {
-                printk("[NET] DHCP got no lease — falling back to static\n");
-                net_dhcpv4_stop(iface);
-                apply_static_ip(iface);
-            }
-        } else {
-            printk("[NET] Static IP mode\n");
-            apply_static_ip(iface);
-        }
-
-        for (int i = 0; i < 15; i++) {                /* settle */
+        printk("[NET] link up — requesting lease...\n");
+        for (int i = 0; i < DHCP_TIMEOUT_MS / 100; i++) {
             network_update_ip();
             if (app_state_has_ip()) break;
-            k_msleep(200);
+            k_msleep(100);
         }
+        if (!app_state_has_ip()) {
+            printk("[NET] DHCP got no lease — falling back to static\n");
+            net_dhcpv4_stop(iface);
+            apply_static_ip(iface);
+        }
+    } else {
+        printk("[NET] Static IP mode\n");
+        apply_static_ip(iface);
+    }
+
+    for (int i = 0; i < 15; i++) {                    /* settle */
+        network_update_ip();
+        if (app_state_has_ip()) break;
+        k_msleep(200);
     }
     printk("[NET] IP = %s  (%s)\n", g_device_ip,
            g_cfg.ip_mode ? "static" : "dhcp");
+    printk("[APP] Running — http://%s/\n\n", g_device_ip);
+}
+
+K_THREAD_STACK_DEFINE(net_stack, 2048);
+static struct k_thread net_thread_data;
+
+void network_start(void)
+{
+    k_thread_create(&net_thread_data, net_stack, K_THREAD_STACK_SIZEOF(net_stack),
+                    net_thread, NULL, NULL, NULL, 6, 0, K_NO_WAIT);
+    k_thread_name_set(&net_thread_data, "net_up");
 }

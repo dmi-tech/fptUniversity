@@ -9,16 +9,18 @@
 extern char g_device_ip[16];
 extern char g_device_mac[18];
 
-/* Last reported reading, served on /status and published over MQTT */
-extern volatile int32_t  g_web_temp_mc;   /* milli-Celsius (DHT11: whole degrees) */
-extern volatile int32_t  g_web_humi_mp;   /* milli-percent */
-extern volatile uint32_t g_web_cnt;       /* number of reports so far */
-extern volatile bool     g_web_sensor_ok;
+/* Latest reading, updated after every DHT11 read; shown on /config, /status
+ * and in the MQTT status message */
+extern volatile int32_t  g_web_temp_mc;   /* milli-Celsius (DHT11: whole degrees), last good read */
+extern volatile int32_t  g_web_humi_mp;   /* milli-percent, last good read */
+extern volatile uint32_t g_web_cnt;       /* number of reads so far */
+extern volatile bool     g_web_sensor_ok; /* the latest read succeeded */
+extern volatile bool     g_web_have_data; /* at least one good read */
 
 /* true once the network has an IP address */
 bool app_state_has_ip(void);
 
-/* Store a new reading for the web page and ask MQTT to publish it */
-void app_state_report(int temp_c, int humi_pct, bool sensor_ok);
+/* Store the reading of one DHT11 read for the web page and MQTT */
+void app_state_update(int temp_c, int humi_pct, bool sensor_ok, bool have_data);
 
 #endif /* APP_STATE_H */

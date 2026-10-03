@@ -3,12 +3,13 @@
 [Tiếng Việt](README.vi.md)
 
 Zephyr RTOS firmware for a custom **STM32H573RI** board: a DHT11
-temperature/humidity monitor with a 20x4 LCD, a built-in web configuration
-page, MQTT reporting (optionally over TLS), and an alarm that drives an RS485
-message, a relay and a motor. Images are booted and verified by **MCUboot**
+temperature/humidity monitor with a 20x4 LCD, a built-in web dashboard and
+configuration page, MQTT reporting (optionally over TLS), and an alarm that
+drives an RS485 message, a relay and a motor. The motor can be switched from the
+web page, over RS485, with a button, or by the alarm. Images are booted and verified by **MCUboot**
 (RSA-2048 signature, downgrade prevention).
 
-- Firmware version: **3.0.0**
+- Firmware version: **3.1.0**
 - Zephyr: **v4.4.2** (pinned in [`west.yml`](west.yml))
 - Board: `stm32h573ri_custom` (definition included in [`boards/`](boards))
 
@@ -19,6 +20,8 @@ message, a relay and a motor. Images are booted and verified by **MCUboot**
 - **20x4 character LCD** (HD44780 behind a PCF8574/PCF8574A I2C backpack). The
   I2C address is auto-detected (0x27/0x3F first, then 0x20-0x27 and 0x38-0x3F).
   If the LCD is unplugged, the firmware probes it again every 10 s.
+- Boot screen (`fw_showcase <ver>` / `DHT11 + ALARM` / `NET WAIT`) for exactly
+  5 s, then the status screen:
 
   ```text
   IP:192.168.1.50
@@ -26,6 +29,11 @@ message, a relay and a motor. Images are booted and verified by **MCUboot**
   MQTT:OK   Motor:OFF
   !! TEMP HIGH !!          <- only while an alarm is active
   ```
+
+  The IP is the saved static one until the Ethernet link is up and an address
+  is assigned. `MQTT:OK` is shown only while the broker session is up and the
+  cable is in. The IP and MQTT fields are redrawn as soon as they change; the
+  sensor values every 2 s.
 
 ### Alarm
 The values are checked on **every** read. Hysteresis stops the alarm from
@@ -54,50 +62,89 @@ When it **clears**:
 
 Thresholds are in [`src/app/alarm.h`](src/app/alarm.h).
 
-### Motor and button
-- The **PA10 button** toggles the motor at any time (interrupt driven, 50 ms
-  debounce).
-- If the **alarm** turned the motor on, it turns off when the alarm clears.
-- If the **button** turned it on, it is never turned off automatically.
-- If the button turns the motor off during an alarm, it stays off until the next
-  alarm starts.
+### Motor
+Four sources can switch the motor (PA2):
+- the **ON/OFF switch on the web page**;
+- an **RS485 `ON` / `OFF`** line;
+- the **PA10 button**, which toggles it (interrupt driven, 50 ms debounce);
+- the **alarm**, which turns it on.
 
-### RS485 (transmit only)
-Uses UART4 at 9600 8N1, with the direction pin on PC3. Messages are ASCII
-lines ending in `\r\n`:
+Rules:
+- If the **alarm** turned the motor on, it turns off when the alarm clears.
+- If it was switched by hand (web, RS485 or button), it is never turned off
+  automatically.
+- A manual OFF during an alarm holds until the next alarm starts.
+- The web page shows who switched it last, for example `(by RS485)`.
+
+### RS485 (send and receive)
+Uses UART4 at 9600 8N1, with the direction pin on PC3 (half duplex). Messages
+are ASCII lines ending in `\r\n`.
+
+Sent by the device:
 
 ```text
 ALARM #12 T=42C H=30% REASON=T_HIGH
 ALARM #13 T=-- H=-- REASON=SENSOR
 CLEAR #14 T=28C H=45%
+ACK MOTOR ON
 ```
 
 `#N` is a running message number. `REASON` is one of `T_HIGH`, `T_LOW`,
-`H_HIGH`, `H_LOW` or `SENSOR`.
+`H_HIGH`, `H_LOW` or `SENSOR`. Text typed in the RS485 box of the web page is
+sent as one line.
+
+Received by the device (case-insensitive, at most 63 characters): `ON` and
+`OFF` switch the motor, the web page follows within 2 s, and the device answers
+`ACK MOTOR ON` / `ACK MOTOR OFF`. A line ends with CR and/or LF, or after a
+50 ms pause, so typing `ON` or `OFF` in a serial terminal is enough. Other
+lines are ignored. Do not send while the device is transmitting.
 
 ### Ethernet, web and MQTT
-- **W5500 Ethernet** gets its address by DHCP. If no lease arrives within 30 s,
-  it falls back to the saved static IP (default `192.168.1.100/24`, gateway
-  `192.168.1.1`).
+- **W5500 Ethernet** comes up in the background, so the LCD never waits for it.
+  It gets its address by DHCP: it waits for the cable without a limit, and if
+  no lease arrives within 30 s after link up, it falls back to the saved
+  static IP (default `192.168.1.100/24`, gateway `192.168.1.1`).
 - **Web server** on port 80:
   - `/login`: password protected, one session at a time, with an increasing
     delay after each wrong password.
-  - `/config`: device info plus alarm, motor and RS485 state (refreshed every
-    5 s), the MQTT settings, and the web password.
+  - `/config` (**DASHBOARD / Device configuration**), refreshed every 2 s:
+    - *Device Information*: name, firmware, MAC, IP, IP mode, web port, alarm,
+      RS485.
+    - *MQTT Settings*: broker, port, client ID, user, password and status.
+      **Subscribe**: a topic and a button; the last 3 messages (up to 384
+      characters each) are shown below (wildcards allowed, not kept across a
+      reboot). **Publish**: a topic, a message and a button (max 128
+      characters); the topic is sent exactly as typed, no prefix added (max 63
+      characters).
+    - *Devices*: `LCD 20x4 Status`, `Sensor DHT11 Status Temperature
+      Humidity`, the motor ON/OFF switch, and an RS485 box with a Send button.
+    - *Modify Web Login Password*.
   - `/status`: JSON.
-  - Saving the settings writes them to flash and reboots the device.
+  - **Save & Apply** stores only the MQTT settings and the password, then
+    reboots. The switch, Send, Subscribe and Publish buttons act at once
+    through `/api/...` (JSON, login required) and never reboot the device.
 - **MQTT** (3.1.1, QoS 0):
-  - Publishes every 60 s, and at once when an alarm starts or clears.
+  - Publishes the status JSON to `users/admin@example.com/<NNN>/status` every
+    30 s, and at once when an alarm starts or clears or the motor is switched.
+    `NNN` is the last byte of the device IP with 3 digits, for example
+    `192.168.1.50` -> `users/admin@example.com/050/status`.
   - Port **8883** uses TLS. The broker certificate is checked against ISRG Root
     X1 (Let's Encrypt), with SNI. Any other port uses plain TCP.
-  - Reconnects automatically if the connection drops.
+  - Reconnects automatically if the connection drops. When the cable is
+    pulled, the session is dropped at once (status `link down`) instead of
+    waiting for the keepalive.
 
-MQTT payload and `/status` JSON:
+Status payload:
 
 ```json
-{"id":"mini_GW","fw":"3.0.0","temp":28,"humi":45,"sensor_ok":1,
- "alarm":0,"reason":"NONE","motor":0,"cnt":7,"ip":"192.168.1.50"}
+{"id":"Board 050","fw":"3.1.0","temp":28,"humi":45,"sensor_ok":1,
+ "alarm":0,"reason":"NONE","motor":1,"motor_by":"RS485","ip":"192.168.1.50"}
 ```
+
+`id` is `Board NNN` (NNN as in the status topic, not the MQTT client ID setting).
+`motor_by` is `web`, `RS485`, `button`, `alarm` or empty. `/status` (web, no
+login) returns the same fields without `id` and `fw`, plus `cnt` (number of
+DHT11 reads). Web values are updated after every DHT11 read.
 
 ### Configuration storage and boot
 - The configuration is kept in **two flash copies** (`config-a` / `config-b`),
@@ -273,8 +320,8 @@ Logs are on SEGGER RTT channel 0. You can read them with either:
 1. Plug in Ethernet and power the board. The LCD shows the IP address.
 2. Open `http://<device-ip>/` and log in with the default password **`123456`**.
 3. Fill in the **MQTT Settings**: broker host, port (`8883` for TLS), client
-   ID, topic, user and password. They are empty on a new device, and MQTT
-   stays `not configured` until they are set.
+   ID, user and password. They are empty on a new device, and MQTT stays
+   `not configured` until they are set. The status topic needs no setting.
 4. **Change the web password**, then click **Save & Apply**. The device reboots
    with the new settings.
 
@@ -297,20 +344,22 @@ fptUniversity/fw_showcase/
 └── src/
     ├── main.c               start-up sequence and main loop
     ├── app/                 application logic
-    │   ├── alarm.c/.h         thresholds, relay blink, motor, button
+    │   ├── alarm.c/.h         thresholds, relay blink
     │   ├── alarm_notify.c/.h  RS485 ALARM/CLEAR messages
+    │   ├── motor.c/.h         motor output, PA10 button, who may switch it
+    │   ├── rs485_cmd.c        RS485 ON/OFF command thread
     │   ├── app_config.c/.h    configuration struct, flash A/B storage
     │   ├── app_state.c/.h     state shared by main loop, web and MQTT
     │   └── version.h
     ├── drivers/             peripheral drivers
     │   ├── dht11.c/.h         DHT11 (Zephyr aosong,dht driver)
     │   ├── lcd_pcf8574.c/.h   HD44780 20x4 over PCF8574
-    │   └── rs485.c/.h         UART4 + direction pin
+    │   └── rs485.c/.h         UART4 + direction pin, line receiver
     ├── net/                 networking
     │   ├── network.c/.h       Ethernet up, DHCP / static IP
     │   ├── http.c/.h          HTTP helpers
-    │   ├── web_server.c       routes, login, config page
-    │   ├── web_pages.h        HTML / CSS
+    │   ├── web_server.c       routes, login, config page, /api tools
+    │   ├── web_pages.h        HTML / CSS / JS
     │   ├── mqtt_app.c/.h      MQTT client thread
     │   └── mqtt_ca.h          TLS trust anchor (ISRG Root X1)
     ├── system/
@@ -322,9 +371,11 @@ fptUniversity/fw_showcase/
         └── mbedtls_user_config.h   TLS buffer sizes
 ```
 
-The web server and MQTT client each run in their own thread (`K_THREAD_DEFINE`).
-The main loop reads the sensor, runs the alarm, updates the LCD and hands new
-readings to web and MQTT through `app_state`.
+The web server, the MQTT client and the RS485 command handler each run in
+their own thread (`K_THREAD_DEFINE`). The main loop reads the sensor, runs the
+alarm, updates the LCD and hands each new reading to web and MQTT through
+`app_state`. Only the MQTT thread calls the MQTT library; the web thread queues
+its Subscribe / Publish requests.
 
 ## License
 

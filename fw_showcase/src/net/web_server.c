@@ -1,4 +1,4 @@
-/* web_server.c — built-in HTTP server (port g_cfg.web_port, default 80)
+/* web_server.c — Lightweight HTTP server for fw_showcase 3.1.0
  *
  * Routes:
  *   GET  /            → redirect to /login
@@ -7,19 +7,29 @@
  *   GET  /config      → device config page (auth required)
  *   POST /save        → save config to flash and reboot (auth required)
  *   GET  /logout      → clear session, redirect /login
- *   GET  /status      → JSON with the last reported sensor data + alarm/motor
+ *   GET  /status      → JSON with the latest sensor data + alarm/motor
+ *
+ * Live tools on /config (auth required, JSON {"ok":0|1,"msg":"..."}, no reboot):
+ *   GET  /api/live      → sensor/LCD/motor/MQTT state + subscribed messages
+ *   POST /api/motor     → on=1|0
+ *   POST /api/rs485     → text=...          (sent as one line + CRLF)
+ *   POST /api/mqtt/sub  → topic=...         (empty = unsubscribe)
+ *   POST /api/mqtt/pub  → topic=...&msg=...
  *
  * Auth: single session token (uptime-based), stored in cookie "sid".
  * Only ONE session active at a time. Token cleared on reboot.
  *
  * Socket strategy: 1 server socket + 1 client socket = 2 total.
  * Each client handled synchronously, closed immediately after response.
+ * This avoids the socket exhaustion issue from v2.5.1.
  */
 #include "web_pages.h"
 #include "http.h"
-#include "app_config.h"
 #include "app_state.h"
+#include "app_config.h"
 #include "alarm.h"
+#include "motor.h"
+#include "lcd_pcf8574.h"
 #include "mqtt_app.h"
 #include "rs485.h"
 #include "version.h"
@@ -27,6 +37,8 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/net/socket.h>
+#include <errno.h>
+#include <stdarg.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,112 +71,219 @@ static void serve_login(int fd, bool err)
     http_respond(fd, 200, "text/html", buf, n, NULL);
 }
 
-/* ── Send config page (built in static buffer) ─────────────────── */
-static char s_page[12288];
+/* ── Streamed response (no Content-Length, "Connection: close") ── */
+static struct {
+    int    fd;
+    size_t n;
+    char   buf[1024];
+} s_out;
+
+static void out_begin(int fd, const char *ctype)
+{
+    char hdr[160];
+    int n = snprintf(hdr, sizeof(hdr),
+        "HTTP/1.1 200 OK\r\nContent-Type: %s\r\n"
+        "Cache-Control: no-store\r\nConnection: close\r\n\r\n", ctype);
+    s_out.fd = fd;
+    s_out.n  = 0;
+    http_send_all(fd, hdr, n);
+}
+
+static void out_flush(void)
+{
+    if (s_out.n) http_send_all(s_out.fd, s_out.buf, s_out.n);
+    s_out.n = 0;
+}
+
+static void out_ch(char c)
+{
+    if (s_out.n == sizeof(s_out.buf)) out_flush();
+    s_out.buf[s_out.n++] = c;
+}
+
+static void out_str(const char *s)
+{
+    while (*s) out_ch(*s++);
+}
+
+static void out_fmt(const char *fmt, ...)
+{
+    char tmp[256];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(tmp, sizeof(tmp), fmt, ap);
+    va_end(ap);
+    if (n >= (int)sizeof(tmp)) printk("[WEB] output part truncated\n");
+    out_str(tmp);
+}
+
+/* Text escaped for an HTML attribute value or element */
+static void out_html(const char *s)
+{
+    for (; *s; s++) {
+        switch (*s) {
+        case '&':  out_str("&amp;");  break;
+        case '<':  out_str("&lt;");   break;
+        case '>':  out_str("&gt;");   break;
+        case '"':  out_str("&quot;"); break;
+        case '\'': out_str("&#39;");  break;
+        default:   out_ch(*s);
+        }
+    }
+}
+
+/* Quoted JSON string */
+static void out_json(const char *s)
+{
+    out_ch('"');
+    for (; *s; s++) {
+        unsigned char c = (unsigned char)*s;
+        if (c == '"' || c == '\\') { out_ch('\\'); out_ch((char)c); }
+        else if (c < 0x20 || c == 0x7F) out_fmt("\\u%04x", c);
+        else out_ch((char)c);
+    }
+    out_ch('"');
+}
+
+static void out_end(void)
+{
+    out_flush();
+}
+
+/* ── Config page ──────────────────────────────────────────────── */
+/* Labelled read-only value / text input, one <td> pair each */
+static void td_ro(const char *label, const char *id, const char *val)
+{
+    out_fmt("<td class=\"lb\">%s</td><td><span class=\"ro\"%s%s%s>", label,
+            id ? " id=\"" : "", id ? id : "", id ? "\"" : "");
+    out_html(val);
+    out_str("</span></td>");
+}
+
+static void td_input(const char *label, const char *type, const char *name,
+                     const char *val, int span)
+{
+    out_fmt("<td class=\"lb\">%s</td><td colspan=\"%d\"><input form=\"cfg\" type=\"%s\" name=\"%s\" value=\"",
+            label, span, type, name);
+    out_html(val);
+    out_str("\"></td>");
+}
 
 static void serve_config(int fd)
 {
-    /* ── Build page ── */
-    int off = 0;
-    int rem = (int)sizeof(s_page);
+    char port[8];
 
-#define AP(...) do { int _n = snprintf(s_page+off, rem, __VA_ARGS__); off += _n; rem -= _n; } while(0)
-
-    AP("<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
-       "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-       "<title>fw_showcase Configuration</title>");
-    AP("%s", CFG_CSS);
-    AP("</head><body>");
+    out_begin(fd, "text/html; charset=UTF-8");
+    out_str("<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+            "<title>fw_showcase Configuration</title>");
+    out_str(CFG_CSS);
+    out_str("</head><body>");
 
     /* Header */
-    AP("<div class=\"hdr\">"
-       "<div><div class=\"hdr-logo\">fw_showcase</div>"
-       "<div class=\"hdr-sub\">Device Configuration Portal</div></div>"
-       "<div style=\"display:flex;align-items:center;gap:14px\">"
-       "<div class=\"hdr-ip\">IP: %s</div>"
-       "<a href=\"/logout\"><button class=\"lbtn\">Logout</button></a>"
-       "</div></div>", g_device_ip);
+    out_str("<div class=\"hdr\">"
+            "<div><div class=\"hdr-logo\">DASHBOARD</div>"
+            "<div class=\"hdr-sub\">Device configuration</div></div>"
+            "<div style=\"display:flex;align-items:center;gap:14px\">"
+            "<div class=\"hdr-ip\">IP: ");
+    out_html(g_device_ip);
+    out_str("</div><a href=\"/logout\"><button class=\"lbtn\">Logout</button></a>"
+            "</div></div>");
 
-    AP("<div class=\"content\"><form method=\"POST\" action=\"/save\">");
+    /* Only the MQTT settings and the password belong to this form (form="cfg");
+     * the live tools below post to /api/... and never reboot the device. */
+    out_str("<div class=\"content\"><form id=\"cfg\" method=\"POST\" action=\"/save\"></form>");
 
-    /* Device Info */
-    AP("<div class=\"sec\"><div class=\"st\">Device Information</div><div class=\"sb\"><table>"
-       "<tr><td class=\"lb\">Device Name</td><td><span class=\"ro\">%s</span></td>"
-       "<td class=\"lb\">Firmware Version</td><td><span class=\"ro\">" FW_VERSION "</span></td>"
-       "<td class=\"lb\">Device MAC</td><td><span class=\"ro\">%s</span></td></tr>"
-       "<tr><td class=\"lb\">Current IP</td><td><span class=\"ro\">%s</span></td>"
-       "<td class=\"lb\">IP Mode</td><td><span class=\"ro\">%s</span></td>"
-       "<td class=\"lb\">Web Port</td><td><span class=\"ro\">%d</span></td></tr>"
-       "<tr><td class=\"lb\">Alarm</td><td><span class=\"ro\" id=\"al\">%s</span></td>"
-       "<td class=\"lb\">Motor</td><td><span class=\"ro\" id=\"mo\">%s</span></td>"
-       "<td class=\"lb\">RS485</td><td><span class=\"ro\" id=\"rs\">%s</span></td></tr>"
-       "</table></div></div>",
-       g_cfg.device_name, g_device_mac, g_device_ip,
-       g_cfg.ip_mode ? "Static" : "DHCP", g_cfg.web_port,
-       alarm_active() ? alarm_reason_str(alarm_reason()) : "OK",
-       motor_is_on() ? "ON" : "OFF",
-       rs485_is_ready() ? "OK" : "OFF");
+    /* Device Info — 3 label/value pairs per row */
+    out_str("<div class=\"sec\"><div class=\"st\">Device Information</div><div class=\"sb\"><table>"
+            "<colgroup><col class=\"l\"><col><col class=\"l\"><col><col class=\"l\"><col></colgroup><tr>");
+    td_ro("Device Name", NULL, g_cfg.device_name);
+    td_ro("Firmware Version", NULL, FW_VERSION);
+    td_ro("Device MAC", NULL, g_device_mac);
+    out_str("</tr><tr>");
+    td_ro("Current IP", NULL, g_device_ip);
+    td_ro("IP Mode", NULL, g_cfg.ip_mode ? "Static" : "DHCP");
+    snprintf(port, sizeof(port), "%u", g_cfg.web_port);
+    td_ro("Web Port", NULL, port);
+    out_str("</tr><tr>");
+    td_ro("Alarm", "al", alarm_active() ? alarm_reason_str(alarm_reason()) : "OK");
+    td_ro("RS485", NULL, rs485_is_ready() ? "OK" : "OFF");
+    out_str("<td></td><td></td></tr></table></div></div>");
 
-    /* MQTT */
-    AP("<div class=\"sec\"><div class=\"st\">MQTT Settings</div><div class=\"sb\"><table>"
-       "<tr><td class=\"lb\">Broker Host</td>"
-       "<td colspan=\"3\"><input type=\"text\" name=\"mqtt_host\" value=\"%s\" style=\"width:300px\"></td>"
-       "<td class=\"lb\">Port</td>"
-       "<td><input type=\"text\" name=\"mqtt_port\" value=\"%d\"></td></tr>"
-       "<tr><td class=\"lb\">Client ID</td>"
-       "<td><input type=\"text\" name=\"mqtt_cid\" value=\"%s\"></td>"
-       "<td class=\"lb\">Topic</td>"
-       "<td colspan=\"3\"><input type=\"text\" name=\"mqtt_topic\" value=\"%s\" style=\"width:260px\"></td></tr>"
-       "<tr><td class=\"lb\">Username</td>"
-       "<td><input type=\"text\" name=\"mqtt_user\" value=\"%s\"></td>"
-       "<td class=\"lb\">Password</td>"
-       "<td colspan=\"3\"><input type=\"password\" name=\"mqtt_pass\" value=\"%s\" style=\"width:300px\"></td></tr>"
-       "<tr><td class=\"lb\">Status</td>"
-       "<td colspan=\"5\"><span class=\"ro\">%s</span></td></tr>"
-       "</table></div></div>",
-       g_cfg.mqtt_host, g_cfg.mqtt_port,
-       g_cfg.mqtt_client_id, g_cfg.mqtt_topic,
-       g_cfg.mqtt_user, g_cfg.mqtt_pass, mqtt_app_status());
+    /* MQTT settings + subscribe / publish tools */
+    out_str("<div class=\"sec\"><div class=\"st\">MQTT Settings</div><div class=\"sb\"><table>"
+            "<colgroup><col class=\"l\"><col><col class=\"l\"><col><col class=\"l\"><col></colgroup><tr>");
+    td_input("Broker Host", "text", "mqtt_host", g_cfg.mqtt_host, 3);
+    snprintf(port, sizeof(port), "%u", g_cfg.mqtt_port);
+    td_input("Port", "text", "mqtt_port", port, 1);
+    out_str("</tr><tr>");
+    td_input("Client ID", "text", "mqtt_cid", g_cfg.mqtt_client_id, 1);
+    td_input("Username", "text", "mqtt_user", g_cfg.mqtt_user, 1);
+    td_input("Password", "password", "mqtt_pass", g_cfg.mqtt_pass, 1);
+    out_str("</tr><tr><td class=\"lb\">Status</td><td colspan=\"5\"><span class=\"ro\" id=\"ms\">");
+    out_html(mqtt_app_status());
+    out_str("</span></td></tr>"
+            "<tr><td colspan=\"6\" class=\"sub\">Subscribe</td></tr>"
+            "<tr><td class=\"lb\">Topic</td>"
+            "<td colspan=\"3\"><input type=\"text\" id=\"st\" maxlength=\"63\" placeholder=\"e.g. demo/cmd or demo/#\"></td>"
+            "<td><button type=\"button\" class=\"btn\" onclick=\"sub()\">Subscribe</button></td>"
+            "<td><span class=\"fb\" id=\"ss\"></span></td></tr>"
+            "<tr id=\"sbr\" style=\"display:none\"><td></td><td colspan=\"5\">"
+            "<textarea id=\"sm\" rows=\"7\" readonly></textarea></td></tr>"
+            "<tr><td colspan=\"6\" class=\"sub\">Publish</td></tr>"
+            "<tr><td class=\"lb\">Topic</td>"
+            "<td colspan=\"3\"><input type=\"text\" id=\"pt\" maxlength=\"63\" placeholder=\"full topic, sent as typed\"></td>"
+            "<td></td><td></td></tr>"
+            "<tr><td class=\"lb\">Message</td>"
+            "<td colspan=\"3\"><input type=\"text\" id=\"pm\" maxlength=\"128\" placeholder=\"payload text\"></td>"
+            "<td><button type=\"button\" class=\"btn\" onclick=\"pub()\">Publish</button></td>"
+            "<td><span class=\"fb\" id=\"pf\"></span></td></tr>"
+            "</table></div></div>");
 
-    /* Sensors (read-only info) */
-    AP("<div class=\"sec\"><div class=\"st\">Sensor &amp; Display</div><div class=\"sb\"><table>"
-       "<tr><td class=\"lb\">Temperature Sensor</td><td><span class=\"ro\">DHT11</span></td>"
-       "<td class=\"lb\">LCD</td><td><span class=\"ro\">20x4</span></td>"
-       "<td></td><td></td></tr>"
-       "<tr><td class=\"lb\">Temp (last report)</td><td><span class=\"ro\" id=\"tv\">%d &deg;C</span></td>"
-       "<td class=\"lb\">Humidity (last report)</td><td><span class=\"ro\" id=\"hv\">%d %%</span></td>"
-       "<td class=\"lb\">Sensor</td><td><span class=\"ro\" id=\"sv\">%s</span></td></tr>"
-       "</table>"
-       "<div class=\"note\">Web/MQTT values update every 60 s and immediately when the alarm changes.</div>"
-       "</div></div>",
-       (int)(g_web_temp_mc / 1000), (int)(g_web_humi_mp / 1000),
-       g_web_sensor_ok ? "OK" : "ERROR");
+    /* Devices — 4 label/value pairs per row; first column as wide as the
+     * other sections so the value boxes start on the same line */
+    char tv[20] = "--", hv[20] = "--";
+    bool on = motor_is_on();
+    enum motor_src by = motor_last_src();
+    if (g_web_have_data) {
+        snprintf(tv, sizeof(tv), "%d °C", (int)(g_web_temp_mc / 1000));
+        snprintf(hv, sizeof(hv), "%d %%", (int)(g_web_humi_mp / 1000));
+    }
+    out_str("<div class=\"sec\"><div class=\"st\">Devices</div><div class=\"sb\"><table>"
+            "<colgroup><col class=\"l\"><col><col class=\"s\"><col><col class=\"s\"><col><col class=\"s\"><col></colgroup><tr>");
+    td_ro("LCD", NULL, "20x4");
+    td_ro("Status", "lv", lcd_is_ready() ? "OK" : "ERR");
+    out_fmt("<td class=\"lb\">Motor</td><td colspan=\"3\"><span class=\"sw\">"
+            "<button type=\"button\" id=\"m1\" class=\"%s\" onclick=\"motor(1)\">ON</button>"
+            "<button type=\"button\" id=\"m0\" class=\"%s\" onclick=\"motor(0)\">OFF</button></span>"
+            "<span class=\"by\" id=\"mby\">",
+            on ? "on" : "", on ? "" : "off");
+    if (by != MOTOR_SRC_NONE) out_fmt("(by %s)", motor_src_str(by));
+    out_str("</span></td></tr><tr>");
+    td_ro("Sensor", NULL, "DHT11");
+    td_ro("Status", "sv", g_web_sensor_ok ? "OK" : "ERR");
+    td_ro("Temperature", "tv", tv);
+    td_ro("Humidity", "hv", hv);
+    out_str("</tr><tr><td class=\"lb\">RS485</td>"
+            "<td colspan=\"5\"><input type=\"text\" id=\"rt\" maxlength=\"60\" placeholder=\"text line sent over RS485 (CRLF added)\"></td>"
+            "<td><button type=\"button\" class=\"btn\" onclick=\"rs()\">Send</button></td>"
+            "<td><span class=\"fb\" id=\"rf\"></span></td></tr>"
+            "</table></div></div>");
 
     /* Password */
-    AP("<div class=\"sec\"><div class=\"st\">Modify Web Login Password</div><div class=\"sb\"><table>"
-       "<tr><td class=\"lb\">New Password</td>"
-       "<td><input type=\"password\" name=\"new_pw\" placeholder=\"leave blank to keep\"></td>"
-       "<td class=\"lb\">Confirm Password</td>"
-       "<td><input type=\"password\" name=\"cfm_pw\" placeholder=\"re-enter new password\"></td>"
-       "<td></td><td></td></tr>"
-       "</table></div></div>");
+    out_str("<div class=\"sec\"><div class=\"st\">Modify Web Login Password</div><div class=\"sb\"><table>"
+            "<colgroup><col class=\"l\"><col><col class=\"l\"><col><col class=\"l\"><col></colgroup><tr>"
+            "<td class=\"lb\">New Password</td>"
+            "<td><input form=\"cfg\" type=\"password\" name=\"new_pw\" placeholder=\"leave blank to keep\"></td>"
+            "<td class=\"lb\">Confirm Password</td>"
+            "<td><input form=\"cfg\" type=\"password\" name=\"cfm_pw\" placeholder=\"re-enter new password\"></td>"
+            "<td></td><td></td></tr>"
+            "</table></div></div>");
 
-    AP("<div class=\"sw\"><button class=\"sbtn\" type=\"submit\">Save &amp; Apply</button></div>");
-    AP("<script>"
-       "function poll(){fetch('/status').then(function(r){return r.json();}).then(function(d){"
-       "document.getElementById('al').textContent=d.alarm?d.reason:'OK';"
-       "document.getElementById('mo').textContent=d.motor?'ON':'OFF';"
-       "document.getElementById('tv').textContent=d.temp+' \\u00b0C';"
-       "document.getElementById('hv').textContent=d.humi+' %%';"
-       "document.getElementById('sv').textContent=d.sensor_ok?'OK':'ERROR';"
-       "}).catch(function(){});}"
-       "poll();setInterval(poll,5000);"
-       "</script>");
-    AP("</form></div></body></html>");
-
-#undef AP
-
-    http_respond(fd, 200, "text/html", s_page, off, NULL);
+    out_str("<div class=\"sv\"><button form=\"cfg\" class=\"sbtn\" type=\"submit\">Save &amp; Apply</button></div>");
+    out_str(CFG_JS);
+    out_str("</div></body></html>");
+    out_end();
 }
 
 /* ── Handle POST /login ──────────────────────────────────────── */
@@ -202,11 +321,15 @@ static void handle_login(int fd, const char *hdr, int hlen)
 }
 
 /* ── Handle POST /save ───────────────────────────────────────── */
+/* POST bodies (web thread only) */
+static char s_body[2048];
+
 static void handle_save(int fd, const char *hdr, int hlen)
 {
-    char body[2048] = {0};
+    char *body = s_body;
     char passbuf[280];
-    http_read_body(fd, hdr, hlen, body, sizeof(body));
+    body[0] = '\0';
+    http_read_body(fd, hdr, hlen, s_body, sizeof(s_body));
 
     char tmp[128];
     app_config_t nc;
@@ -233,8 +356,6 @@ static void handle_save(int fd, const char *hdr, int hlen)
         nc.mqtt_port = (uint16_t)atoi(tmp);
     if (http_form_field(body, "mqtt_cid", tmp, sizeof(tmp)))
         strncpy(nc.mqtt_client_id, tmp, sizeof(nc.mqtt_client_id) - 1);
-    if (http_form_field(body, "mqtt_topic", tmp, sizeof(tmp)))
-        strncpy(nc.mqtt_topic, tmp, sizeof(nc.mqtt_topic) - 1);
     if (http_form_field(body, "mqtt_user", tmp, sizeof(tmp)))
         strncpy(nc.mqtt_user, tmp, sizeof(nc.mqtt_user) - 1);
     if (http_form_field(body, "mqtt_pass", passbuf, sizeof(passbuf)))
@@ -267,15 +388,131 @@ static void handle_save(int fd, const char *hdr, int hlen)
 /* ── Handle GET /status (JSON) ───────────────────────────────── */
 static void handle_status(int fd)
 {
-    char buf[256];
+    char buf[288];
     int n = snprintf(buf, sizeof(buf),
         "{\"temp\":%d,\"humi\":%d,\"sensor_ok\":%d,\"cnt\":%u,\"ip\":\"%s\","
-        "\"alarm\":%d,\"reason\":\"%s\",\"motor\":%d}",
+        "\"alarm\":%d,\"reason\":\"%s\",\"motor\":%d,\"motor_by\":\"%s\"}",
         (int)(g_web_temp_mc / 1000), (int)(g_web_humi_mp / 1000),
         g_web_sensor_ok ? 1 : 0, g_web_cnt, g_device_ip,
         alarm_active() ? 1 : 0, alarm_reason_str(alarm_reason()),
-        motor_is_on() ? 1 : 0);
+        motor_is_on() ? 1 : 0, motor_src_str(motor_last_src()));
     http_respond(fd, 200, "application/json", buf, n, NULL);
+}
+
+/* ── Live tools (/api/...) ───────────────────────────────────── */
+static void api_reply(int fd, bool ok, const char *msg)
+{
+    out_begin(fd, "application/json");
+    out_fmt("{\"ok\":%d,\"msg\":", ok ? 1 : 0);
+    out_json(msg);
+    out_str("}");
+    out_end();
+}
+
+static void api_live(int fd)
+{
+    static struct mqtt_sub_view v;
+    char topic[MQTT_TOPIC_MAX];
+
+    mqtt_app_sub_view(&v);
+    mqtt_app_status_topic(topic, sizeof(topic));
+
+    out_begin(fd, "application/json");
+    out_fmt("{\"temp\":%d,\"humi\":%d,\"have\":%d,\"sensor_ok\":%d,\"lcd_ok\":%d,"
+            "\"alarm\":%d,\"reason\":\"%s\",\"motor\":%d,\"motor_by\":\"%s\",\"mqtt\":",
+            (int)(g_web_temp_mc / 1000), (int)(g_web_humi_mp / 1000),
+            g_web_have_data ? 1 : 0, g_web_sensor_ok ? 1 : 0, lcd_is_ready() ? 1 : 0,
+            alarm_active() ? 1 : 0, alarm_reason_str(alarm_reason()),
+            motor_is_on() ? 1 : 0, motor_src_str(motor_last_src()));
+    out_json(mqtt_app_status());
+    out_str(",\"status_topic\":");
+    out_json(topic);
+    out_str(",\"sub\":");
+    out_json(v.topic);
+    out_str(",\"sub_state\":");
+    out_json(v.state);
+    out_str(",\"msgs\":[");
+    for (int i = 0; i < v.count; i++) {
+        out_fmt("%s{\"t\":%u,\"cut\":%d,\"topic\":", i ? "," : "",
+                v.msgs[i].uptime_s, v.msgs[i].truncated ? 1 : 0);
+        out_json(v.msgs[i].topic);
+        out_str(",\"data\":");
+        out_json(v.msgs[i].data);
+        out_str("}");
+    }
+    out_str("]}");
+    out_end();
+}
+
+static void api_motor(int fd, const char *body)
+{
+    char v[4];
+    if (!http_form_field(body, "on", v, sizeof(v)) || (strcmp(v, "0") && strcmp(v, "1"))) {
+        api_reply(fd, false, "on must be 0 or 1");
+        return;
+    }
+    motor_set(v[0] == '1', MOTOR_SRC_WEB);
+    api_reply(fd, true, v[0] == '1' ? "motor ON" : "motor OFF");
+}
+
+static void api_rs485(int fd, const char *body)
+{
+    char text[RS485_LINE_MAX + 2];   /* room for the CRLF */
+
+    http_form_field(body, "text", text, RS485_LINE_MAX - 3);
+    text[strcspn(text, "\r\n")] = '\0';            /* one line only */
+    if (!text[0])           { api_reply(fd, false, "enter a text"); return; }
+    if (!rs485_is_ready())  { api_reply(fd, false, "RS485 not ready"); return; }
+    strcat(text, "\r\n");
+    rs485_send(text);
+    api_reply(fd, true, "sent");
+}
+
+static void api_mqtt_sub(int fd, const char *body)
+{
+    char topic[MQTT_TOPIC_MAX + 1];
+
+    http_form_field(body, "topic", topic, sizeof(topic));
+    if (mqtt_app_subscribe(topic) != 0) {
+        api_reply(fd, false, "topic too long (max 63)");
+        return;
+    }
+    api_reply(fd, true, topic[0] ? "subscribing" : "unsubscribed");
+}
+
+static void api_mqtt_pub(int fd, const char *body)
+{
+    char topic[MQTT_TOPIC_MAX + 1], msg[MQTT_MSG_MAX + 1], sent[MQTT_TOPIC_MAX + 16];
+
+    http_form_field(body, "topic", topic, sizeof(topic));
+    http_form_field(body, "msg", msg, sizeof(msg));
+    int rc = mqtt_app_publish(topic, msg, sent, sizeof(sent) - 12);
+    if (rc == 0) {
+        memmove(sent + 3, sent, strlen(sent) + 1);   /* "-> " before the topic */
+        memcpy(sent, "-> ", 3);
+    }
+    api_reply(fd, rc == 0,
+              rc == 0          ? sent :
+              rc == -ENOTCONN  ? "MQTT not connected" :
+              rc == -EBUSY     ? "busy, try again" :
+              rc == -EMSGSIZE  ? "message too long (max 128)" :
+                                 "invalid topic (no + or #, max 63)");
+}
+
+/* POST /api/... after authentication */
+static void handle_api_post(int fd, const char *path, const char *hdr, int hlen)
+{
+    s_body[0] = '\0';
+    http_read_body(fd, hdr, hlen, s_body, sizeof(s_body));
+
+    if      (strcmp(path, "/api/motor") == 0)    api_motor(fd, s_body);
+    else if (strcmp(path, "/api/rs485") == 0)    api_rs485(fd, s_body);
+    else if (strcmp(path, "/api/mqtt/sub") == 0) api_mqtt_sub(fd, s_body);
+    else if (strcmp(path, "/api/mqtt/pub") == 0) api_mqtt_pub(fd, s_body);
+    else {
+        const char *nf = "Not Found";
+        http_respond(fd, 404, "text/plain", nf, strlen(nf), NULL);
+    }
 }
 
 /* ── Handle one client ───────────────────────────────────────── */
@@ -324,6 +561,18 @@ static void handle_client(int fd)
         http_redirect(fd, "/login");
     } else if (is_get && strcmp(path, "/status") == 0) {
         handle_status(fd);
+    } else if (strncmp(path, "/api/", 5) == 0) {
+        if (!authed) {
+            const char *body = "{\"ok\":0,\"msg\":\"login required\"}";
+            http_respond(fd, 401, "application/json", body, strlen(body), NULL);
+        } else if (is_get && strcmp(path, "/api/live") == 0) {
+            api_live(fd);
+        } else if (is_post) {
+            handle_api_post(fd, path, s_req, n);
+        } else {
+            const char *body = "Not Found";
+            http_respond(fd, 404, "text/plain", body, strlen(body), NULL);
+        }
     } else {
         const char *body = "Not Found";
         http_respond(fd, 404, "text/plain", body, strlen(body), NULL);
@@ -381,4 +630,4 @@ static void web_server_thread(void *p1, void *p2, void *p3)
 }
 
 /* Started 2 s after boot; waits for an IP address itself */
-K_THREAD_DEFINE(web_tid, 4096, web_server_thread, NULL, NULL, NULL, 5, 0, 2000);
+K_THREAD_DEFINE(web_tid, 6144, web_server_thread, NULL, NULL, NULL, 5, 0, 2000);
