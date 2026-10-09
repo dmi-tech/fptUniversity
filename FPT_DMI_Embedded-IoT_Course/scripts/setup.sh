@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# One-time setup of the west workspace for EmbeddedCourse_FPT_DMI. Safe to run again.
+# One-time setup of the west workspace for FPT_DMI_Embedded-IoT_Course. Safe to run again.
 #
 # The workspace is the directory that holds the repository clone:
 #
 #   <workspace>/
 #   ├── fptUniversity/          <- this repository
-#   │   └── EmbeddedCourse_FPT_DMI/
+#   │   └── FPT_DMI_Embedded-IoT_Course/
 #   ├── .venv/  .west/          <- created here
 #   └── zephyr/  modules/  bootloader/
 #
@@ -14,7 +14,7 @@
 # The workspace may already be set up for fw_showcase (same repository): the
 # manifest is then switched to this project's west.yml.
 #
-# Usage: EmbeddedCourse_FPT_DMI/scripts/setup.sh
+# Usage: FPT_DMI_Embedded-IoT_Course/scripts/setup.sh
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

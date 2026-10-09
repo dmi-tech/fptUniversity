@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(EmbeddedCourse_FPT_DMI VERSION 1.0.0)
+project(FPT_DMI_Embedded-IoT_Course VERSION 1.0.0)
 
 # Thư mục chứa toàn bộ driver của môn học
 set(DRIVER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/driver)

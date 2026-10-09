@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Lab 7: make an upgrade image for slot1 from a finished build (scripts/build.sh).
 #
-# Re-signs <build_dir>/EmbeddedCourse_FPT_DMI/zephyr/zephyr.bin with the given version, pads it to
+# Re-signs <build_dir>/FPT_DMI_Embedded-IoT_Course/zephyr/zephyr.bin with the given version, pads it to
 # the slot size and adds the MCUboot trailer magic. Flashed at the start of slot1 it makes MCUboot
 # swap it in on the next reset as a TEST image: not confirmed yet, so it is reverted unless the
 # application calls boot_write_img_confirmed().
@@ -16,7 +16,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 [ $# -ge 2 ] || die "usage: $0 <build_dir> <version> [out.bin]"
 build_dir=$(realpath -m "$1")
 version=$2
-bin=$build_dir/EmbeddedCourse_FPT_DMI/zephyr/zephyr.bin
+bin=$build_dir/FPT_DMI_Embedded-IoT_Course/zephyr/zephyr.bin
 out=$(realpath -m "${3:-$build_dir/upgrade-$version.bin}")
 [ -r "$bin" ] || die "$bin not found: run scripts/build.sh first"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\+[0-9]+)?$ ]] || die "bad version: $version"

@@ -1,4 +1,4 @@
-# EmbeddedCourse_FPT_DMI
+# FPT_DMI_Embedded-IoT_Course
 
 Project thực hành môn **Lập trình nhúng** trên board **Base Board STMH5** (STM32H573RI,
 Cortex-M33, Zephyr RTOS v4.4.2). Sinh viên học bằng cách **ghép driver có sẵn vào project**:
@@ -34,7 +34,7 @@ Thư mục làm việc (*workspace*) chứa bản clone này; Zephyr và các mo
 
 ```text
 course-workspace/
-├── fptUniversity/EmbeddedCourse_FPT_DMI/   <- project này
+├── fptUniversity/FPT_DMI_Embedded-IoT_Course/   <- project này
 ├── .venv/  .west/                          <- script tạo
 └── zephyr/  modules/  bootloader/          <- script tải về
 ```
@@ -43,8 +43,8 @@ course-workspace/
 mkdir course-workspace && cd course-workspace
 git clone https://github.com/dmi-tech/fptUniversity.git
 
-./fptUniversity/EmbeddedCourse_FPT_DMI/scripts/setup.sh       # Zephyr, module, SDK (mất vài phút)
-./fptUniversity/EmbeddedCourse_FPT_DMI/scripts/setup_udev.sh  # Linux: quyền USB cho ST-LINK/J-Link
+./fptUniversity/FPT_DMI_Embedded-IoT_Course/scripts/setup.sh       # Zephyr, module, SDK (mất vài phút)
+./fptUniversity/FPT_DMI_Embedded-IoT_Course/scripts/setup_udev.sh  # Linux: quyền USB cho ST-LINK/J-Link
 ```
 
 Sau `setup_udev.sh`: rút và cắm lại mạch nạp, đăng xuất rồi đăng nhập lại (nhóm `plugdev`,
@@ -58,7 +58,7 @@ Sau `setup_udev.sh`: rút và cắm lại mạch nạp, đăng xuất rồi đă
 ## 3. Build, nạp, xem log
 
 ```bash
-cd course-workspace/fptUniversity/EmbeddedCourse_FPT_DMI
+cd course-workspace/fptUniversity/FPT_DMI_Embedded-IoT_Course
 
 ./scripts/build.sh      # build (MCUboot + ứng dụng đã ký), không nạp
 ./scripts/flash.sh      # build + nạp qua ST-LINK   (RUNNER=jlink ./scripts/flash.sh cho J-Link)
@@ -114,7 +114,7 @@ Bảng chân và ràng buộc: [`docs/pinout.md`](docs/pinout.md).
 ## 6. Cấu trúc thư mục
 
 ```text
-EmbeddedCourse_FPT_DMI/
+FPT_DMI_Embedded-IoT_Course/
 ├── src/main.c  CMakeLists.txt  prj.conf  app.overlay   # 4 file của sinh viên
 ├── driver/            # Driver + README từng driver (peripherals, protocols, devices, services)
 ├── boards/            # Mô tả board stm32h573ri_custom (không sửa)

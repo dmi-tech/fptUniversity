@@ -35,7 +35,7 @@ int main(void)
 {
 	int ret = driver_gpio_out_init(0);
 
-	printk("\n== EmbeddedCourse_FPT_DMI v%s (build %s %s) ==\n", APP_VERSION_STRING,
+	printk("\n== FPT_DMI_Embedded-IoT_Course v%s (build %s %s) ==\n", APP_VERSION_STRING,
 	       __DATE__, __TIME__);
 	if (ret < 0) {
 		printk("led init failed: %d\n", ret);

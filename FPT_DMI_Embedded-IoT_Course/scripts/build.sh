@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build EmbeddedCourse_FPT_DMI (MCUboot + signed application) with sysbuild.
+# Build FPT_DMI_Embedded-IoT_Course (MCUboot + signed application) with sysbuild.
 # Never flashes.
 #
 # Signing key: STM32H573_MCUBOOT_KEY_FILE (RSA-2048 private key). When unset,

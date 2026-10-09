@@ -1,6 +1,6 @@
-# west manifest for EmbeddedCourse_FPT_DMI.
+# west manifest for FPT_DMI_Embedded-IoT_Course.
 #
-#   west init -l --mf EmbeddedCourse_FPT_DMI/west.yml fptUniversity
+#   west init -l --mf FPT_DMI_Embedded-IoT_Course/west.yml fptUniversity
 #   (run from the directory that holds the fptUniversity clone)
 #   west update
 #

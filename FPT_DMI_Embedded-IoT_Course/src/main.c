@@ -4,7 +4,7 @@
 int main(void)
 {
 	printk("\n============================================\n");
-	printk("   EmbeddedCourse_FPT_DMI - Zephyr RTOS\n");
+	printk("   FPT_DMI_Embedded-IoT_Course - Zephyr RTOS\n");
 	printk("   Target: %s\n", CONFIG_BOARD_TARGET);
 	printk("   Hello, World !!!\n");
 	printk("============================================\n\n");

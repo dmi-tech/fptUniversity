@@ -209,7 +209,7 @@ dùng PA6 làm ECHO khi encoder đang ở PC6.
 ## 4. Build, nạp, xem log
 
 ```bash
-cd ~/zephyr-boards/fw_showcase-workspace/fptUniversity/EmbeddedCourse_FPT_DMI
+cd ~/zephyr-boards/fw_showcase-workspace/fptUniversity/FPT_DMI_Embedded-IoT_Course
 ./scripts/build.sh          # build MCUboot + app, ký ảnh
 ./scripts/flash.sh          # nạp qua ST-LINK (mặc định) hoặc: ./scripts/flash.sh jlink
 ./scripts/rtt.sh            # xem printk qua SWD (Ctrl+C để thoát)
