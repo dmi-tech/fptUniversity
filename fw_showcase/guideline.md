@@ -1,14 +1,12 @@
-================================================================================
-                 HƯỚNG DẪN CÀI ĐẶT VÀ CHẠY PROJECT fw_showcase
-                     (dành cho người mới bắt đầu)
-================================================================================
+# HƯỚNG DẪN CÀI ĐẶT VÀ CHẠY PROJECT fw_showcase
 
+```text
 Phiên bản tài liệu : 1.0 (02/10/2026)
 Firmware           : fw_showcase 3.1.0
 Nền tảng           : Zephyr RTOS v4.4.2 + MCUboot, Zephyr SDK 1.0.1
 Board              : Base Board STM32H573RI (E-Desk), tên board Zephyr
                      "stm32h573ri_custom"
-Nguồn tham chiếu   : mã nguồn trong thư mục này, README.vi.md, và schematic
+Nguồn tham chiếu   : mã nguồn trong thư mục này, README.md, và schematic
                      "Base Board STMH5.pdf" (MCUH5, RS485, Ethernet, In-out
                      connect, CAN, Power).
 
@@ -19,10 +17,11 @@ Quy ước trong tài liệu:
                   trước khi làm theo.
   $ lệnh          lệnh gõ trong terminal Linux (không gõ dấu $).
   LƯU Ý           điều dễ làm sai hoặc dễ gây hỏng phần cứng.
+```
 
+## MỤC LỤC
 
-MỤC LỤC
--------
+```text
   0.  Project này làm gì
   1.  Quy trình tổng quát
   2.  Thiết bị cần chuẩn bị
@@ -47,12 +46,11 @@ MỤC LỤC
   16. Phụ lục B: bảng lệnh hay dùng
   17. Phụ lục C: bảng phân vùng flash
   18. Phụ lục D: thuật ngữ
+```
 
+## 0. PROJECT NÀY LÀM GÌ
 
-================================================================================
-0. PROJECT NÀY LÀM GÌ
-================================================================================
-
+```text
 fw_showcase là firmware Zephyr cho board STM32H573RI, dùng để trình diễn một
 hệ thống giám sát nhiệt độ/độ ẩm:
 
@@ -70,14 +68,13 @@ hệ thống giám sát nhiệt độ/độ ẩm:
   - Khởi động an toàn bằng MCUboot: ảnh firmware ký RSA-2048, chống hạ cấp,
     cấu hình lưu 2 bản trong flash có CRC.
 
-Mô tả đầy đủ tính năng xem README.vi.md. Tài liệu này tập trung vào việc
+Mô tả đầy đủ tính năng xem README.md. Tài liệu này tập trung vào việc
 LẮP RÁP, CÀI ĐẶT, BUILD, NẠP và KIỂM TRA.
+```
 
+## 1. QUY TRÌNH TỔNG QUÁT
 
-================================================================================
-1. QUY TRÌNH TỔNG QUÁT
-================================================================================
-
+```text
    [Chuẩn bị thiết bị] -> [Đấu nối] -> [Mở máy ảo] -> [Đặt khóa ký]
         -> [Build] -> [Nạp] -> [Xem log] -> [Cấu hình qua web] -> [Kiểm tra]
 
@@ -90,14 +87,13 @@ LẮP RÁP, CÀI ĐẶT, BUILD, NẠP và KIỂM TRA.
   Build                      7      3-5 phút
   Nạp                        8      2 phút
   Cấu hình web + kiểm tra    10,11  30 phút
+```
 
+## 2. THIẾT BỊ CẦN CHUẨN BỊ
 
-================================================================================
-2. THIẾT BỊ CẦN CHUẨN BỊ
-================================================================================
+### 2.1 Bắt buộc
 
-2.1 Bắt buộc
-------------
+```text
   STT  Thiết bị                         Ghi chú
   ---  -------------------------------  ---------------------------------------
   1    Base Board STM32H573RI (E-Desk)  Board chính.
@@ -118,9 +114,11 @@ LẮP RÁP, CÀI ĐẶT, BUILD, NẠP và KIỂM TRA.
   7    Cáp Ethernet + router/switch     Router nên có DHCP. Máy tính (máy ảo)
                                         phải cùng mạng LAN với board.
   8    Dây dupont đực                   U16 là header CÁI 2x10 bước 2.54 mm.
+```
 
-2.2 Để chạy đầy đủ demo (khuyến nghị)
--------------------------------------
+### 2.2 Để chạy đầy đủ demo (khuyến nghị)
+
+```text
   STT  Thiết bị                         Ghi chú
   ---  -------------------------------  ---------------------------------------
   9    Diode 1N4007/SS14 + tụ 100 nF    Mắc song song hai đầu motor để chống
@@ -136,26 +134,28 @@ LẮP RÁP, CÀI ĐẶT, BUILD, NẠP và KIỂM TRA.
                                         CN3 (COM1/OUT1).
   14   MQTT broker                      Mosquitto chạy trong máy ảo/LAN (cổng
                                         1883) là cách dễ nhất để thử.
+```
 
-2.3 Tùy chọn / dụng cụ
-----------------------
+### 2.3 Tùy chọn / dụng cụ
+
+```text
   - Bộ chuyển USB-UART 3.3 V: xem log của MCUboot ở UART5 (U16-19/U16-20).
   - Đồng hồ vạn năng: kiểm tra nguồn, cực tính, thông mạch.
   - Máy sấy tóc hoặc đá lạnh: tạo điều kiện vượt ngưỡng để thử cảnh báo.
   - Phần mềm terminal: minicom, picocom, CuteCom (Linux) để dùng RS485/UART.
   - mosquitto-clients (mosquitto_sub, mosquitto_pub) để thử MQTT.
+```
 
+## 3. BẢN ĐỒ CHÂN (PIN MAP) CỦA BOARD
 
-================================================================================
-3. BẢN ĐỒ CHÂN (PIN MAP) CỦA BOARD
-================================================================================
-
+```text
 Toàn bộ thông tin dưới đây đọc từ schematic "Base Board STMH5.pdf" và đối
 chiếu với devicetree trong boards/st/stm32h573ri_custom/.
+```
 
-3.1 Sơ đồ khối nguồn và vùng cách ly
-------------------------------------
+### 3.1 Sơ đồ khối nguồn và vùng cách ly
 
+```text
   Jack DC1 --D3--+--> +24V ---+--> URB2405YMD-20WR3 (DC-DC cách ly) --> +5V
   (24 V)         |            |                                         |
   CN4 ---------- +            |                                    TPS56320
@@ -179,10 +179,11 @@ chiếu với devicetree trong boards/st/stm32h573ri_custom/.
       KHÔNG cấp quá 24-28 V.
     - CN4 nối thẳng vào đường +24V, nằm SAU diode chống ngược cực D3 của
       jack DC1. Cấp nguồn qua CN4 thì phải kiểm tra cực tính thật kỹ.
+```
 
-3.2 Header mở rộng U16 (header cái 2x10, bước 2.54 mm, PM2.54-2X10P)
----------------------------------------------------------------------
+### 3.2 Header mở rộng U16 (header cái 2x10, bước 2.54 mm, PM2.54-2X10P)
 
+```text
   Nhìn từ trên xuống, chân 1 có dấu tròn:
 
         +------+------+
@@ -231,10 +232,11 @@ chiếu với devicetree trong boards/st/stm32h573ri_custom/.
     - Schematic ghi chú "SPI2 Tuning" cho nhóm chân 2-10. Board gốc định
       dùng U16 cho module ESP32/SPI2. fw_showcase đã tắt SPI2/USART1/2/6 để
       dùng lại chân (xem boards/stm32h573ri_custom.overlay).
+```
 
-3.3 Các cổng CN1 - CN5 (terminal bước 3.81 mm, thuộc vùng GND-ISO)
--------------------------------------------------------------------
+### 3.3 Các cổng CN1 - CN5 (terminal bước 3.81 mm, thuộc vùng GND-ISO)
 
+```text
   CN1 - RS485 (4 chân)                          fw_showcase: CÓ DÙNG
     Chân  Tín hiệu   Ghi chú
     ----  ---------  -------------------------------------------------------
@@ -307,10 +309,11 @@ chiếu với devicetree trong boards/st/stm32h573ri_custom/.
 
     - Phía MCU: FDCAN1 TX = PB7, RX = PB8, chân S của TCAN1057 = PB0.
       fw_showcase tắt FDCAN1.
+```
 
-3.4 Cổng nạp J3, nút nhấn, jack nguồn, USB-C, RJ45
---------------------------------------------------
+### 3.4 Cổng nạp J3, nút nhấn, jack nguồn, USB-C, RJ45
 
+```text
   J3 - SWD (JST-SH 1.0 mm, 5 chân, BM05B-SRSS)
     Chân  Tín hiệu        Nối với ST-LINK / J-Link
     ----  --------------  -------------------------------------------------
@@ -331,10 +334,11 @@ chiếu với devicetree trong boards/st/stm32h573ri_custom/.
   Jack DC1 (DC-005): ngõ vào 24 V, có diode SS54 chống ngược cực.
   USB-C (USB1): cấp 5 V phía logic. fw_showcase không dùng chức năng USB.
   RJ45 (J1, HR911105A): Ethernet qua chip W5500, có LED Link/Act.
+```
 
-3.5 Ngoại vi trên board và chân MCU
------------------------------------
+### 3.5 Ngoại vi trên board và chân MCU
 
+```text
   Ngoại vi            Chân MCU                            Trạng thái trong
                                                           fw_showcase
   ------------------  ----------------------------------  ----------------
@@ -356,17 +360,17 @@ chiếu với devicetree trong boards/st/stm32h573ri_custom/.
   SWD                 PA13 SWDIO, PA14 SWCLK, PB3 SWO     Nạp + log RTT
   Thạch anh           25 MHz (PH0/PH1)                    MCU chạy HSI+PLL
                                                           250 MHz
+```
 
+## 4. ĐẤU NỐI PHẦN CỨNG CHO fw_showcase (TỪNG BƯỚC)
 
-================================================================================
-4. ĐẤU NỐI PHẦN CỨNG CHO fw_showcase (TỪNG BƯỚC)
-================================================================================
-
+```text
   LƯU Ý: TẮT NGUỒN board trước khi đấu dây.
+```
 
-4.1 Bảng đấu nối tóm tắt
-------------------------
+### 4.1 Bảng đấu nối tóm tắt
 
+```text
   Thiết bị              Chân thiết bị   Nối vào board
   --------------------  --------------  -------------------------------------
   DHT11                 VCC (+)         U16-1 (+5V)
@@ -391,10 +395,11 @@ chiếu với devicetree trong boards/st/stm32h573ri_custom/.
   (Tùy chọn) USB-UART   RX              U16-19 (PB13, TX của board)
   3.3 V                 TX              U16-20 (PB12, RX của board)
                         GND             U16-17/18
+```
 
-4.2 Chi tiết từng thiết bị
---------------------------
+### 4.2 Chi tiết từng thiết bị
 
+```text
   a) DHT11
      - Dùng module có sẵn điện trở kéo lên. Nếu dùng cảm biến trần 4 chân,
        phải tự thêm điện trở 4.7k-10k giữa DATA và VCC.
@@ -439,27 +444,30 @@ chiếu với devicetree trong boards/st/stm32h573ri_custom/.
   f) Mạch nạp
      - ST-LINK/J-Link: nối SWDIO, SWCLK, GND, VTref với J3.
      - Mạch nạp KHÔNG cấp nguồn cho board. Board phải được cấp nguồn riêng.
+```
 
-4.3 Kiểm tra trước khi cấp nguồn
---------------------------------
+### 4.3 Kiểm tra trước khi cấp nguồn
+
+```text
   [ ] Đo jack/CN4 bằng đồng hồ: đúng 24 V, đúng cực tính.
   [ ] Không có dây nào chạm giữa +5V và GND trên U16.
   [ ] Motor nối qua Relay 3 (COM3/OUT3), dương và âm cùng một nguồn; không
       nối motor vào chân GPIO nào.
   [ ] Dây CN1-3 (+24V) không nối vào bộ chuyển USB-RS485.
   [ ] Cáp Ethernet đã cắm, đèn Link trên RJ45 sáng sau khi cấp nguồn.
+```
 
+## 5. MÔI TRƯỜNG PHẦN MỀM (MÁY ẢO)
 
-================================================================================
-5. MÔI TRƯỜNG PHẦN MỀM (MÁY ẢO)
-================================================================================
-
+```text
 Môi trường build (Zephyr, module, SDK, Python, công cụ) đã được cài sẵn trong
 máy ảo. Người mới KHÔNG cần chạy lại setup.sh. Cách dựng máy ảo từ đầu nằm
 ở Phụ lục A.
+```
 
-5.1 Thông tin máy ảo
---------------------
+### 5.1 Thông tin máy ảo
+
+```text
   - Phần mềm ảo hóa             : [CẦN BỔ SUNG] (VirtualBox / VMware / ...)
   - File máy ảo / nơi tải       : [CẦN BỔ SUNG]
   - Tài khoản đăng nhập         : [CẦN BỔ SUNG]
@@ -478,9 +486,11 @@ máy ảo. Người mới KHÔNG cần chạy lại setup.sh. Cách dựng máy 
     +-- bootloader/mcuboot/    MCUboot
     +-- modules/               hal_stm32, mbedtls, segger, ...
     ~/zephyr-sdk-1.0.1/        Zephyr SDK (toolchain arm-zephyr-eabi)
+```
 
-5.2 Cấu hình máy ảo cần thiết
------------------------------
+### 5.2 Cấu hình máy ảo cần thiết
+
+```text
   - USB pass-through: phải chuyển ST-LINK/J-Link (và bộ chuyển USB-RS485,
     USB-UART) từ máy thật vào máy ảo. VirtualBox: Devices > USB > chọn thiết
     bị. Nên tạo "USB filter" để tự động gắn.
@@ -489,9 +499,11 @@ máy ảo. Người mới KHÔNG cần chạy lại setup.sh. Cách dựng máy 
     board và board không kết nối được broker MQTT chạy trong máy ảo.
   - Quyền USB: người dùng trong máy ảo phải đọc/ghi được ST-LINK (udev rules
     của STM32CubeProgrammer, xem Phụ lục A).
+```
 
-5.3 Kiểm tra nhanh môi trường
------------------------------
+### 5.3 Kiểm tra nhanh môi trường
+
+```text
   $ cd $WS
   $ ls                                      # thấy: fptUniversity zephyr ...
   $ .venv/bin/west --version                # in ra phiên bản west
@@ -501,29 +513,32 @@ máy ảo. Người mới KHÔNG cần chạy lại setup.sh. Cách dựng máy 
   $ lsusb | grep -i -E "st-link|stlink|segger"   # thấy mạch nạp (đã cắm)
 
   Nếu lệnh nào lỗi, xem mục 14.
+```
 
-5.4 Cập nhật code/driver từ GitHub
-----------------------------------
+### 5.4 Cập nhật code/driver từ GitHub
+
+```text
   Repo GitHub dùng để cập nhật code, môi trường và driver vào máy ảo:
   $ cd $WS/fptUniversity && git pull
   Nếu west.yml thay đổi (đổi phiên bản Zephyr/module), chạy lại:
   $ $WS/fptUniversity/fw_showcase/scripts/setup.sh
   setup.sh chạy lại an toàn, bước nào đã làm sẽ bỏ qua.
+```
 
+## 6. KHÓA KÝ MCUboot
 
-================================================================================
-6. KHÓA KÝ MCUboot
-================================================================================
+### 6.1 Vì sao cần khóa
 
-6.1 Vì sao cần khóa
--------------------
+```text
   MCUboot chỉ khởi động firmware được ký bằng khóa RSA-2048 khớp với khóa
   công khai nhúng trong chính MCUboot. Khóa bí mật KHÔNG được lưu trong repo
   (.gitignore chặn *.pem, *.key). Script build đọc đường dẫn khóa từ biến môi
   trường STM32H573_MCUBOOT_KEY_FILE.
+```
 
-6.2 Chọn khóa
--------------
+### 6.2 Chọn khóa
+
+```text
   Cách 1 - Dùng khóa chung của project (khuyến nghị cho lớp học/nhóm):
     Lấy file khóa từ: [CẦN BỔ SUNG]
     $ export STM32H573_MCUBOOT_KEY_FILE=~/keys/fw_showcase-rsa2048.pem
@@ -547,14 +562,13 @@ máy ảo. Người mới KHÔNG cần chạy lại setup.sh. Cách dựng máy 
     - Không commit, không gửi khóa qua chat/email công khai. Sao lưu khóa.
     - Mất khóa: các board ngoài hiện trường không cập nhật được ứng dụng nếu
       không nạp lại MCUboot qua SWD.
+```
 
+## 7. BUILD FIRMWARE
 
-================================================================================
-7. BUILD FIRMWARE
-================================================================================
+### 7.1 Build bằng script (khuyến nghị)
 
-7.1 Build bằng script (khuyến nghị)
------------------------------------
+```text
   $ cd $WS
   $ ./fptUniversity/fw_showcase/scripts/build.sh
     -> thư mục build: fptUniversity/fw_showcase/build
@@ -567,17 +581,21 @@ máy ảo. Người mới KHÔNG cần chạy lại setup.sh. Cách dựng máy 
 
   Build thành công khi thấy dòng cuối:
     === DONE fw_showcase build: .../fw_showcase/build ===
+```
 
-7.2 File đầu ra
----------------
+### 7.2 File đầu ra
+
+```text
   File                                            Nội dung
   ----------------------------------------------  -----------------------------
   build/mcuboot/zephyr/zephyr.hex                 Bootloader MCUboot
   build/fw_showcase/zephyr/zephyr.signed.hex      Ứng dụng đã ký (nạp SWD)
   build/fw_showcase/zephyr/zephyr.signed.bin      Ứng dụng đã ký (dạng nhị phân)
+```
 
-7.3 Lệnh tương đương chạy tay (để hiểu script làm gì)
------------------------------------------------------
+### 7.3 Lệnh tương đương chạy tay (để hiểu script làm gì)
+
+```text
   $ cd $WS && source .venv/bin/activate
   $ west build -p always -d fptUniversity/fw_showcase/build \
         -b stm32h573ri_custom --sysbuild fptUniversity/fw_showcase \
@@ -589,41 +607,48 @@ máy ảo. Người mới KHÔNG cần chạy lại setup.sh. Cách dựng máy 
     --sysbuild              build MCUboot + ứng dụng trong một lần
     -DBOARD_ROOT=...        chỉ cho Zephyr thư mục chứa định nghĩa board
     SB_CONFIG_BOOT_SIGNATURE_KEY_FILE   khóa để ký ứng dụng và nhúng vào MCUboot
+```
 
-7.4 Mở menu cấu hình Kconfig (khi cần)
---------------------------------------
+### 7.4 Mở menu cấu hình Kconfig (khi cần)
+
+```text
   $ source $WS/.venv/bin/activate
   $ west build -d $WS/fptUniversity/fw_showcase/build -t menuconfig
   Thay đổi qua menuconfig chỉ tồn tại trong thư mục build. Muốn giữ lâu dài,
   sửa prj.conf.
+```
 
+## 8. NẠP FIRMWARE
 
-================================================================================
-8. NẠP FIRMWARE
-================================================================================
+### 8.1 Chuẩn bị
 
-8.1 Chuẩn bị
-------------
+```text
   - Cấp nguồn cho board (24 V).
   - Cắm ST-LINK vào máy, gắn vào máy ảo, nối với J3.
   - Kiểm tra: $ STM32_Programmer_CLI -c port=SWD
     Kết quả in ra thông tin chip (Device name: STM32H573/...) là kết nối tốt.
+```
 
-8.2 Build + nạp bằng một lệnh (ST-LINK)
----------------------------------------
+### 8.2 Build + nạp bằng một lệnh (ST-LINK)
+
+```text
   $ cd $WS
   $ ./fptUniversity/fw_showcase/scripts/flash.sh
   Script build lại, sau đó nạp cả MCUboot và ứng dụng đã ký. Thành công khi
   thấy: === DONE fw_showcase flash ===
+```
 
-8.3 Nạp bản build có sẵn bằng west
-----------------------------------
+### 8.3 Nạp bản build có sẵn bằng west
+
+```text
   $ cd $WS && source .venv/bin/activate
   $ west flash -d fptUniversity/fw_showcase/build              # ST-LINK
   $ west flash -d fptUniversity/fw_showcase/build -r jlink     # J-Link
+```
 
-8.4 Chỉ cập nhật ứng dụng
--------------------------
+### 8.4 Chỉ cập nhật ứng dụng
+
+```text
   - Cách 1: nạp build/fw_showcase/zephyr/zephyr.signed.hex vào slot image-0
     (file .hex đã chứa địa chỉ đúng 0x08020000).
   - Cách 2 (thử cập nhật kiểu MCUboot): nạp ảnh đã ký vào slot image-1
@@ -632,37 +657,42 @@ máy ảo. Người mới KHÔNG cần chạy lại setup.sh. Cách dựng máy 
       2. Trong 3 giây đó, bấm SW1 (Reset) một lần.
       3. Board khởi động lại và MCUboot đổi sang ảnh ở slot image-1.
     Ảnh mới tự xác nhận (confirm) khi chạy được.
+```
 
-8.5 Sau khi nạp
----------------
+### 8.5 Sau khi nạp
+
+```text
   - LED LIFE (PA8) nháy nhanh 3 giây (cửa sổ NRST swap), sau đó nháy đúp
     đều (heartbeat).
   - LCD hiện màn hình khởi động ("fw_showcase 3.1.0" / "DHT11 + ALARM" /
     "NET WAIT") đúng 5 giây, sau đó hiện màn hình trạng thái. Dòng IP hiện
     IP tĩnh đã lưu cho tới khi Ethernet có link và được cấp địa chỉ, rồi đổi
     ngay sang IP thật (DHCP chờ tối đa 30 giây kể từ lúc có link).
+```
 
+## 9. XEM LOG (CONSOLE)
 
-================================================================================
-9. XEM LOG (CONSOLE)
-================================================================================
-
+```text
 Có 2 nguồn log khác nhau:
 
   Thành phần     Kênh                         Cách đọc
   -------------  ---------------------------  -----------------------------
   Ứng dụng       SEGGER RTT kênh 0 (qua SWD)  J-Link RTT Viewer hoặc OpenOCD
   MCUboot        UART5, 115200 8N1            USB-UART 3.3 V nối U16-19/20
+```
 
-9.1 Log ứng dụng qua J-Link
----------------------------
+### 9.1 Log ứng dụng qua J-Link
+
+```text
   $ JLinkRTTViewer
     (chọn Device STM32H573RI, giao tiếp SWD, tốc độ 4000 kHz)
   Hoặc ghi ra file:
   $ JLinkRTTLogger -Device STM32H573RI -If SWD -Speed 4000 -RTTChannel 0 log.txt
+```
 
-9.2 Log ứng dụng qua ST-LINK + OpenOCD
---------------------------------------
+### 9.2 Log ứng dụng qua ST-LINK + OpenOCD
+
+```text
   Chạy OpenOCD với cấu hình cho STM32H5 (ví dụ interface/stlink.cfg và
   target/stm32h5x.cfg), sau đó trong telnet 4444:
     rtt setup 0x20000000 0x40000 "SEGGER RTT"
@@ -671,14 +701,18 @@ Có 2 nguồn log khác nhau:
   Rồi đọc log:
   $ nc localhost 19021      (hoặc telnet localhost 19021)
   [CẦN KIỂM TRA] tên file cấu hình target của OpenOCD đã cài trong máy ảo.
+```
 
-9.3 Log của MCUboot qua UART5
------------------------------
+### 9.3 Log của MCUboot qua UART5
+
+```text
   $ picocom -b 115200 /dev/ttyUSB0
   Nối RX của bộ USB-UART vào U16-19 (PB13) và GND vào U16-17.
+```
 
-9.4 Log mẫu khi khởi động bình thường
--------------------------------------
+### 9.4 Log mẫu khi khởi động bình thường
+
+```text
   == fw_showcase v3.1.0 ==
   [CFG] slot A invalid - trying backup slot B     (lần đầu, flash trống)
   [CFG] No saved config - loading defaults
@@ -697,12 +731,11 @@ Có 2 nguồn log khác nhau:
   [MQTT] connection lost ...    -> broker mất kết nối, tự nối lại sau 3 giây
   [MQTT] link down              -> rút cáp mạng, phiên MQTT bị ngắt ngay
   MQTT status "not configured"  -> chưa nhập Broker Host (mục 10, bước 4)
+```
 
+## 10. SỬ DỤNG LẦN ĐẦU
 
-================================================================================
-10. SỬ DỤNG LẦN ĐẦU
-================================================================================
-
+```text
   1. Cắm Ethernet, cấp nguồn. Chờ LCD hiện dòng "IP:x.x.x.x". Trước khi có
      link, dòng này là IP tĩnh đã lưu.
      - Có DHCP: IP do router cấp.
@@ -732,12 +765,11 @@ Có 2 nguồn log khác nhau:
       allow_anonymous true
   $ sudo systemctl restart mosquitto
   Broker Host trên web = IP của máy ảo (xem bằng: ip -4 addr).
+```
 
+## 11. KIỂM TRA TỪNG CHỨC NĂNG (CHECKLIST)
 
-================================================================================
-11. KIỂM TRA TỪNG CHỨC NĂNG (CHECKLIST)
-================================================================================
-
+```text
   [ ] 11.1 DHT11 và LCD
         - LCD hiện: dòng 1 IP, dòng 2 "T: 28.0°C , H: 45.0%", dòng 3
           "MQTT:OK   Motor:OFF". "MQTT:OK" chỉ hiện khi đã kết nối broker và
@@ -808,14 +840,13 @@ Có 2 nguồn log khác nhau:
   [ ] 11.7 Lưu cấu hình
         Đổi cấu hình MQTT -> Save & Apply -> sau khi khởi động lại, cấu hình
         vẫn còn. Log in "[CFG] loaded from slot A".
+```
 
+## 12. CẤU TRÚC MÃ NGUỒN VÀ CÁC CHỈNH SỬA THƯỜNG GẶP
 
-================================================================================
-12. CẤU TRÚC MÃ NGUỒN VÀ CÁC CHỈNH SỬA THƯỜNG GẶP
-================================================================================
+### 12.1 Cấu trúc
 
-12.1 Cấu trúc
--------------
+```text
   fw_showcase/
   +-- west.yml                manifest west (Zephyr v4.4.2 + module cần thiết)
   +-- CMakeLists.txt          danh sách file nguồn
@@ -845,9 +876,11 @@ Có 2 nguồn log khác nhau:
   một thread, khai báo bằng K_THREAD_DEFINE) và vòng lặp chính trong main.c.
   Chỉ thread MQTT gọi thư viện MQTT. Web gửi yêu cầu Subscribe/Publish qua
   hàng đợi.
+```
 
-12.2 Chỉnh sửa thường gặp
--------------------------
+### 12.2 Chỉnh sửa thường gặp
+
+```text
   Muốn ...                          Sửa ở đâu
   --------------------------------  -----------------------------------------
   Đổi ngưỡng cảnh báo, độ trễ       src/modules/Alarm/alarm.h (ALARM_T_HIGH_C, ...)
@@ -870,12 +903,11 @@ Có 2 nguồn log khác nhau:
       123456).
     - DHT11 cần >= 1 giây giữa 2 lần đọc. Không đặt DHT_READ_PERIOD_MS < 1000.
     - Sau khi sửa, build lại bằng build.sh và kiểm tra lại checklist mục 11.
+```
 
+## 13. CÁC LƯU Ý QUAN TRỌNG / RỦI RO ĐÃ BIẾT
 
-================================================================================
-13. CÁC LƯU Ý QUAN TRỌNG / RỦI RO ĐÃ BIẾT
-================================================================================
-
+```text
   13.1 Địa chỉ MAC cố định trong code
        MAC của W5500 đặt cứng trong devicetree:
        local-mac-address = [00 08 DC 01 02 03]
@@ -933,12 +965,11 @@ Có 2 nguồn log khác nhau:
   13.10 Cấp nguồn
        Chỉ cắm USB-C thì relay/RS485 không chạy. CN4 không có chống ngược cực.
        Không cấp quá 28 V.
+```
 
+## 14. XỬ LÝ SỰ CỐ (FAQ)
 
-================================================================================
-14. XỬ LÝ SỰ CỐ (FAQ)
-================================================================================
-
+```text
   --- Build ---
   Lỗi: [ERR] Signing key not found: <unset>
     -> Chưa đặt STM32H573_MCUBOOT_KEY_FILE hoặc file không đọc được. Xem
@@ -1025,12 +1056,11 @@ Có 2 nguồn log khác nhau:
 
   --- Khác ---
   Quên mật khẩu web -> mục 13.2.
+```
 
+## 15. PHỤ LỤC A: CÀI MÔI TRƯỜNG TỪ ĐẦU (DÀNH CHO NGƯỜI DỰNG MÁY ẢO)
 
-================================================================================
-15. PHỤ LỤC A: CÀI MÔI TRƯỜNG TỪ ĐẦU (DÀNH CHO NGƯỜI DỰNG MÁY ẢO)
-================================================================================
-
+```text
   Hệ điều hành đã thử: Ubuntu (khuyến nghị bản LTS 64-bit). Cần Internet và
   khoảng [CẦN BỔ SUNG] GB dung lượng trống.
 
@@ -1078,12 +1108,11 @@ Có 2 nguồn log khác nhau:
   A.7 Trước khi đóng gói máy ảo: xóa thư mục build, KHÔNG để khóa riêng của
   bạn trong máy ảo nếu máy ảo sẽ chia sẻ cho nhiều người (trừ khi đó là khóa
   dùng chung của lớp học).
+```
 
+## 16. PHỤ LỤC B: BẢNG LỆNH HAY DÙNG
 
-================================================================================
-16. PHỤ LỤC B: BẢNG LỆNH HAY DÙNG
-================================================================================
-
+```text
   Việc                         Lệnh (chạy trong $WS)
   ---------------------------  ------------------------------------------------
   Build                        ./fptUniversity/fw_showcase/scripts/build.sh
@@ -1099,12 +1128,11 @@ Có 2 nguồn log khác nhau:
   Theo dõi MQTT                mosquitto_sub -h <broker> -t 'users/admin@example.com/<NNN>/#' -v
   Trạng thái board (JSON)      curl http://<IP-board>/status
   Cập nhật code                cd fptUniversity && git pull
+```
 
+## 17. PHỤ LỤC C: BẢNG PHÂN VÙNG FLASH (2 MB, bắt đầu 0x08000000)
 
-================================================================================
-17. PHỤ LỤC C: BẢNG PHÂN VÙNG FLASH (2 MB, bắt đầu 0x08000000)
-================================================================================
-
+```text
   Phân vùng      Offset     Địa chỉ       Kích thước  Nội dung
   -------------  ---------  ------------  ----------  -------------------------
   mcuboot        0x000000   0x08000000    128 KB      Bootloader MCUboot
@@ -1114,12 +1142,11 @@ Có 2 nguồn log khác nhau:
   config-a       0x1A0000   0x081A0000    32 KB       Cấu hình (bản chính)
   config-b       0x1A8000   0x081A8000    32 KB       Cấu hình (bản dự phòng)
   swapmark       0x1B0000   0x081B0000    8 KB        Cờ thao tác NRST swap
+```
 
+## 18. PHỤ LỤC D: THUẬT NGỮ
 
-================================================================================
-18. PHỤ LỤC D: THUẬT NGỮ
-================================================================================
-
+```text
   Zephyr       Hệ điều hành thời gian thực (RTOS) mã nguồn mở.
   west         Công cụ dòng lệnh của Zephyr: tải mã nguồn, build, nạp.
   manifest     File west.yml, liệt kê phiên bản Zephyr và các module cần tải.
@@ -1139,7 +1166,6 @@ Có 2 nguồn log khác nhau:
   DHCP         Router tự cấp IP cho thiết bị.
   Hysteresis   Độ trễ: ngưỡng bật và ngưỡng tắt khác nhau để tránh bật/tắt
                liên tục quanh một giá trị.
+```
 
-================================================================================
-                                 HẾT TÀI LIỆU
-================================================================================
+## HẾT TÀI LIỆU

@@ -1,7 +1,5 @@
 # fw_showcase
 
-[Tiếng Việt](README.vi.md)
-
 Zephyr RTOS firmware for a custom **STM32H573RI** board: a DHT11
 temperature/humidity monitor with a 20x4 LCD, a built-in web dashboard and
 configuration page, MQTT reporting (optionally over TLS), and an alarm that

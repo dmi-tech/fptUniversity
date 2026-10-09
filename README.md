@@ -26,5 +26,4 @@ export STM32H573_MCUBOOT_KEY_FILE=~/keys/fw_showcase-rsa2048.pem   # khóa ký M
 ./fptUniversity/fw_showcase/scripts/flash.sh              # build + nạp qua ST-LINK
 ```
 
-Chi tiết xem [fw_showcase/README.vi.md](fw_showcase/README.vi.md)
-([English](fw_showcase/README.md)).
+Chi tiết xem [fw_showcase/README.md](fw_showcase/README.md).
