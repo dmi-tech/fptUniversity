@@ -38,14 +38,10 @@ Quy ước trong tài liệu:
   8.  Nạp firmware
   9.  Xem log (console)
   10. Sử dụng lần đầu
-  11. Kiểm tra từng chức năng (checklist)
-  12. Cấu trúc mã nguồn và các chỉnh sửa thường gặp
-  13. Các lưu ý quan trọng / rủi ro đã biết
-  14. Xử lý sự cố (FAQ)
-  15. Phụ lục A: cài môi trường từ đầu (dành cho người dựng máy ảo)
-  16. Phụ lục B: bảng lệnh hay dùng
-  17. Phụ lục C: bảng phân vùng flash
-  18. Phụ lục D: thuật ngữ
+  11. Các lưu ý quan trọng / rủi ro đã biết
+  12. Xử lý sự cố (FAQ)
+  13. Phụ lục A: cài môi trường từ đầu (dành cho người dựng máy ảo)
+  14. Phụ lục B: thuật ngữ
 ```
 
 ## 0. PROJECT NÀY LÀM GÌ
@@ -324,7 +320,7 @@ chiếu với devicetree trong boards/st/stm32h573ri_custom/.
     5     +3V3-STM        VTref / TVCC (chân đo điện áp tham chiếu).
                           KHÔNG dùng chân này để cấp nguồn cho board.
 
-    LƯU Ý: J3 KHÔNG có chân NRST. Xem mục 14 nếu nạp báo lỗi reset/kết nối.
+    LƯU Ý: J3 KHÔNG có chân NRST. Xem mục 12 nếu nạp báo lỗi reset/kết nối.
 
   Nút nhấn trên board:
     SW1 "Reset"  -> NRST: reset MCU. Dùng cho thao tác "NRST swap" (mục 8.4).
@@ -362,7 +358,7 @@ chiếu với devicetree trong boards/st/stm32h573ri_custom/.
                                                           250 MHz
 ```
 
-## 4. ĐẤU NỐI PHẦN CỨNG CHO fw_showcase (TỪNG BƯỚC)
+## 4. ĐẤU NỐI PHẦN CỨNG CHO fw_showcase:
 
 ```text
   LƯU Ý: TẮT NGUỒN board trước khi đấu dây.
@@ -446,17 +442,6 @@ chiếu với devicetree trong boards/st/stm32h573ri_custom/.
      - Mạch nạp KHÔNG cấp nguồn cho board. Board phải được cấp nguồn riêng.
 ```
 
-### 4.3 Kiểm tra trước khi cấp nguồn
-
-```text
-  [ ] Đo jack/CN4 bằng đồng hồ: đúng 24 V, đúng cực tính.
-  [ ] Không có dây nào chạm giữa +5V và GND trên U16.
-  [ ] Motor nối qua Relay 3 (COM3/OUT3), dương và âm cùng một nguồn; không
-      nối motor vào chân GPIO nào.
-  [ ] Dây CN1-3 (+24V) không nối vào bộ chuyển USB-RS485.
-  [ ] Cáp Ethernet đã cắm, đèn Link trên RJ45 sáng sau khi cấp nguồn.
-```
-
 ## 5. MÔI TRƯỜNG PHẦN MỀM (MÁY ẢO)
 
 ```text
@@ -512,7 +497,7 @@ máy ảo. Người mới KHÔNG cần chạy lại setup.sh. Cách dựng máy 
   $ which STM32_Programmer_CLI              # phải in ra đường dẫn
   $ lsusb | grep -i -E "st-link|stlink|segger"   # thấy mạch nạp (đã cắm)
 
-  Nếu lệnh nào lỗi, xem mục 14.
+  Nếu lệnh nào lỗi, xem mục 12.
 ```
 
 ### 5.4 Cập nhật code/driver từ GitHub
@@ -726,7 +711,7 @@ Có 2 nguồn log khác nhau:
   | T=28C | H=45% | IP=192.168.1.50 | OK | MOTOR:OFF   |
 
   Đọc lỗi thường gặp:
-  | DHT11 read error -5 | ...   -> xem mục 14 (DHT11)
+  | DHT11 read error -5 | ...   -> xem mục 12 (DHT11)
   [NET] DHCP got no lease       -> không có DHCP, dùng IP tĩnh 192.168.1.100
   [MQTT] connection lost ...    -> broker mất kết nối, tự nối lại sau 3 giây
   [MQTT] link down              -> rút cáp mạng, phiên MQTT bị ngắt ngay
@@ -756,7 +741,7 @@ Có 2 nguồn log khác nhau:
   LƯU Ý:
     - "Save & Apply" chỉ lưu MQTT và mật khẩu. Các nút công tắc motor, Send
       RS485, Subscribe, Publish có tác dụng ngay, không khởi động lại.
-    - Hãy ghi lại mật khẩu mới. Quên mật khẩu thì phải xóa flash (mục 14).
+    - Hãy ghi lại mật khẩu mới. Quên mật khẩu thì phải xóa flash (mục 12).
 
   Chuẩn bị Mosquitto trong máy ảo (thử nghiệm, KHÔNG dùng cho sản phẩm):
   $ sudo apt install mosquitto mosquitto-clients
@@ -767,145 +752,7 @@ Có 2 nguồn log khác nhau:
   Broker Host trên web = IP của máy ảo (xem bằng: ip -4 addr).
 ```
 
-## 11. KIỂM TRA TỪNG CHỨC NĂNG (CHECKLIST)
-
-```text
-  [ ] 11.1 DHT11 và LCD
-        - LCD hiện: dòng 1 IP, dòng 2 "T: 28.0°C , H: 45.0%", dòng 3
-          "MQTT:OK   Motor:OFF". "MQTT:OK" chỉ hiện khi đã kết nối broker và
-          cáp mạng đang cắm; rút cáp thì đổi ngay sang "MQTT:N/A".
-        - Hà hơi vào DHT11: độ ẩm tăng trong vài lần đọc (mỗi 2 giây).
-
-  [ ] 11.2 Cảnh báo (ngưỡng trong src/modules/Alarm/alarm.h)
-        Điều kiện         Bắt đầu khi         Hết khi
-        ----------------  ------------------  ----------------------------
-        Nhiệt độ cao      > 40 °C             <= 39 °C
-        Nhiệt độ thấp     < 0 °C              >= 1 °C
-        Độ ẩm cao         > 90 %              <= 88 %
-        Độ ẩm thấp        < 20 %              >= 22 %
-        Lỗi cảm biến      3 lần đọc lỗi liên  lần đọc tốt đầu tiên
-                          tiếp
-        Cách thử dễ nhất: RÚT DÂY DATA của DHT11 -> sau khoảng 6 giây báo
-        "SENSOR". Hoặc dùng máy sấy cho > 40 °C (giữ khoảng cách, đừng làm
-        chảy nhựa).
-        Kết quả mong đợi khi cảnh báo bắt đầu:
-          - RS485 gửi "ALARM #n T=.. H=.. REASON=..." và lặp lại mỗi 10 giây.
-          - Relay 1 nháy 500 ms bật / 500 ms tắt (nghe tiếng tách, LED relay).
-          - Chỉ cảnh báo NHIỆT ĐỘ CAO mới bật motor. Cảnh báo độ ẩm, nhiệt độ
-            thấp và SENSOR (rút dây DATA) chỉ nháy Relay 1, motor không đổi.
-          - LCD dòng 4 hiện cảnh báo. Web và MQTT cập nhật ngay.
-        Khi hết cảnh báo: RS485 gửi "CLEAR #n ...", relay tắt, motor tắt (nếu
-        do cảnh báo nhiệt độ cao bật).
-
-  [ ] 11.3 Motor
-        - Bật/tắt bằng công tắc trên web -> web hiện "(by web)".
-        - Nhấn rồi thả nút PA10 -> đảo trạng thái lúc thả tay, "(by button)".
-          Giữ nút thì chưa đổi.
-        - Gửi "ON"/"OFF" qua RS485 -> "(by RS485)", board trả "ACK MOTOR ON".
-        - Quy tắc: motor do cảnh báo nhiệt độ cao bật thì tự tắt khi nhiệt độ
-          về bình thường. Motor bật/tắt bằng tay thì không bao giờ tự đổi.
-          Tắt bằng tay khi đang quá nhiệt thì giữ tắt đến lần quá nhiệt sau.
-
-  [ ] 11.4 RS485
-        $ picocom -b 9600 --omap crlf --echo /dev/ttyUSB0
-        Gõ ON rồi Enter -> nhận "ACK MOTOR ON". Gõ OFF -> "ACK MOTOR OFF".
-        Lệnh không phân biệt hoa/thường, tối đa 63 ký tự. Gõ chữ trong ô
-        RS485 trên web, bấm Send -> dòng đó xuất hiện trong picocom.
-        LƯU Ý: không gửi trong lúc board đang gửi (bán song công).
-
-  [ ] 11.5 MQTT
-        NNN = byte cuối của IP board, đủ 3 chữ số (192.168.1.50 -> 050).
-        $ mosquitto_sub -h <IP-broker> -t 'users/admin@example.com/050/#' -v
-        Mỗi 30 giây (và ngay khi có cảnh báo/đổi motor) nhận:
-        users/admin@example.com/050/status
-                   {"id":"Board 050","fw":"3.1.0","temp":28,"humi":45,
-                    "sensor_ok":1,"alarm":0,"reason":"NONE","motor":1,
-                    "motor_by":"RS485","ip":"192.168.1.50"}
-        Thử Publish trên web: topic "test/hello", nội dung "hello" -> board
-        gửi đúng topic "test/hello", không thêm tiền tố (tối đa 63 ký tự).
-        Thử Subscribe trên web: topic "abc/#", rồi:
-        $ mosquitto_pub -h <IP-broker> -t abc/x -m hi
-        -> web hiện tin nhắn (lưu tối đa 3 tin gần nhất).
-
-  [ ] 11.6 HTTP API (dùng curl)
-        $ curl http://<IP-board>/status                    # không cần login
-        $ curl -c ck.txt -d 'pw=123456' http://<IP-board>/login
-        $ curl -b ck.txt -d 'on=1' http://<IP-board>/api/motor
-        $ curl -b ck.txt -d 'text=HELLO' http://<IP-board>/api/rs485
-        $ curl -b ck.txt http://<IP-board>/api/live
-        Kết quả API dạng {"ok":1,"msg":"..."}.
-        LƯU Ý: đăng nhập bằng curl sẽ đá phiên đăng nhập trên trình duyệt (chỉ
-        1 phiên).
-
-  [ ] 11.7 Lưu cấu hình
-        Đổi cấu hình MQTT -> Save & Apply -> sau khi khởi động lại, cấu hình
-        vẫn còn. Log in "[CFG] loaded from slot A".
-```
-
-## 12. CẤU TRÚC MÃ NGUỒN VÀ CÁC CHỈNH SỬA THƯỜNG GẶP
-
-### 12.1 Cấu trúc
-
-```text
-  fw_showcase/
-  +-- west.yml                manifest west (Zephyr v4.4.2 + module cần thiết)
-  +-- CMakeLists.txt          danh sách file nguồn
-  +-- prj.conf                Kconfig của ứng dụng
-  +-- sysbuild.conf           chọn MCUboot, kiểu chữ ký
-  +-- sysbuild/mcuboot.conf   Kconfig của MCUboot
-  +-- boards/
-  |   +-- st/stm32h573ri_custom/        định nghĩa board (DTS, pinctrl)
-  |   +-- stm32h573ri_custom.overlay    thay đổi devicetree cho showcase
-  +-- scripts/                setup.sh, build.sh, flash.sh
-  +-- src/
-      +-- main.c              khởi động + vòng lặp chính (đọc 2 s/lần)
-      +-- modules/            mỗi module một thư mục
-          +-- Alarm/          ngưỡng cảnh báo, tin ALARM/CLEAR qua RS485
-          +-- Boot/           xác nhận ảnh MCUboot, NRST swap
-          +-- Config/         cấu hình, trạng thái dùng chung, phiên bản
-          +-- DHT11/          cảm biến DHT11
-          +-- LCD/            driver LCD PCF8574, bố cục màn hình
-          +-- Motor/          ngõ ra motor, nút PA10
-          +-- MQTT/           MQTT client, chứng chỉ CA, cấu hình mbedTLS (TLS/)
-          +-- Network/        Ethernet, DHCP / IP tĩnh
-          +-- RS485/          UART4 RS485, lệnh ON/OFF
-          +-- StatusLED/      LED LIFE
-          +-- WebServer/      web server, trang HTML, hàm HTTP
-
-  Các luồng (thread): web server, MQTT client, bộ xử lý lệnh RS485 (mỗi cái
-  một thread, khai báo bằng K_THREAD_DEFINE) và vòng lặp chính trong main.c.
-  Chỉ thread MQTT gọi thư viện MQTT. Web gửi yêu cầu Subscribe/Publish qua
-  hàng đợi.
-```
-
-### 12.2 Chỉnh sửa thường gặp
-
-```text
-  Muốn ...                          Sửa ở đâu
-  --------------------------------  -----------------------------------------
-  Đổi ngưỡng cảnh báo, độ trễ       src/modules/Alarm/alarm.h (ALARM_T_HIGH_C, ...)
-  Đổi chu kỳ đọc / gửi MQTT /       src/main.c (DHT_READ_PERIOD_MS,
-  lặp ALARM                         REPORT_PERIOD_MS, ALARM_REPEAT_PERIOD_MS)
-  Đổi chân thiết bị ngoài           boards/stm32h573ri_custom.overlay
-  Bật/tắt tính năng Zephyr          prj.conf
-  Đổi giá trị mặc định (mật khẩu,   src/modules/Config/app_config.c (config_defaults)
-  IP tĩnh, tên thiết bị)
-  Đổi CA cho MQTT TLS               src/modules/MQTT/mqtt_ca.h
-  Đổi giao diện web                 src/modules/WebServer/web_pages.h, web_server.c
-  Đổi nội dung LCD                  src/modules/LCD/lcd_view.c
-  Đổi phiên bản hiển thị            src/modules/Config/version.h (và CMakeLists.txt)
-
-  LƯU Ý khi sửa:
-    - Thêm file .c mới: phải thêm vào target_sources trong CMakeLists.txt.
-    - Sửa struct app_config_t (thêm/bớt/đổi kích thước trường): PHẢI tăng
-      CFG_VERSION trong app_config.h. Nếu không, cấu hình cũ trong flash bị
-      đọc sai. Khi tăng, board sẽ quay về cấu hình mặc định (kể cả mật khẩu
-      123456).
-    - DHT11 cần >= 1 giây giữa 2 lần đọc. Không đặt DHT_READ_PERIOD_MS < 1000.
-    - Sau khi sửa, build lại bằng build.sh và kiểm tra lại checklist mục 11.
-```
-
-## 13. CÁC LƯU Ý QUAN TRỌNG / RỦI RO ĐÃ BIẾT
+## 11. CÁC LƯU Ý QUAN TRỌNG / RỦI RO ĐÃ BIẾT
 
 ```text
   13.1 Địa chỉ MAC cố định trong code
@@ -957,7 +804,7 @@ Có 2 nguồn log khác nhau:
 
   13.8 J3 không có NRST
        Mạch nạp không reset cứng được board (board.cmake dùng
-       --reset-mode=hw). Xem mục 14 nếu nạp báo lỗi.
+       --reset-mode=hw). Xem mục 12 nếu nạp báo lỗi.
 
   13.9 Nhãn relay trên schematic bị ngược
        Xem mục 3.3 (CN3). Tin theo devicetree: Relay 1 = PB5.
@@ -967,7 +814,7 @@ Có 2 nguồn log khác nhau:
        Không cấp quá 28 V.
 ```
 
-## 14. XỬ LÝ SỰ CỐ (FAQ)
+## 12. XỬ LÝ SỰ CỐ (FAQ)
 
 ```text
   --- Build ---
@@ -1046,19 +893,19 @@ Có 2 nguồn log khác nhau:
     -> Máy ảo phải ở chế độ mạng Bridged, cùng dải IP với board. Thử:
        ping <IP-board>.
   Nhiều board cùng mạng bị chập chờn
-    -> Trùng MAC (mục 13.1).
+    -> Trùng MAC (mục 11.1).
   MQTT luôn "not configured"
     -> Chưa điền Broker Host, chưa Save & Apply.
   MQTT không kết nối
     -> Port 1883: kiểm tra broker có cho phép kết nối từ LAN (listener 1883,
-       allow_anonymous, tường lửa). Port 8883: xem mục 13.6. Tên miền
-       broker: xem mục 13.5.
+       allow_anonymous, tường lửa). Port 8883: xem mục 11.6. Tên miền
+       broker: xem mục 11.5.
 
   --- Khác ---
-  Quên mật khẩu web -> mục 13.2.
+  Quên mật khẩu web -> mục 11.2.
 ```
 
-## 15. PHỤ LỤC A: CÀI MÔI TRƯỜNG TỪ ĐẦU (DÀNH CHO NGƯỜI DỰNG MÁY ẢO)
+## 13. PHỤ LỤC A: CÀI MÔI TRƯỜNG TỪ ĐẦU (DÀNH CHO NGƯỜI DỰNG MÁY ẢO)
 
 ```text
   Hệ điều hành đã thử: Ubuntu (khuyến nghị bản LTS 64-bit). Cần Internet và
@@ -1110,41 +957,7 @@ Có 2 nguồn log khác nhau:
   dùng chung của lớp học).
 ```
 
-## 16. PHỤ LỤC B: BẢNG LỆNH HAY DÙNG
-
-```text
-  Việc                         Lệnh (chạy trong $WS)
-  ---------------------------  ------------------------------------------------
-  Build                        ./fptUniversity/fw_showcase/scripts/build.sh
-  Build + nạp (ST-LINK)        ./fptUniversity/fw_showcase/scripts/flash.sh
-  Nạp bản build có sẵn         source .venv/bin/activate &&
-                               west flash -d fptUniversity/fw_showcase/build
-  Nạp bằng J-Link              west flash -d fptUniversity/fw_showcase/build -r jlink
-  Kiểm tra kết nối ST-LINK     STM32_Programmer_CLI -c port=SWD
-  Xóa toàn bộ flash            STM32_Programmer_CLI -c port=SWD -e all
-  Menuconfig                   west build -d fptUniversity/fw_showcase/build -t menuconfig
-  Log RTT (J-Link)             JLinkRTTViewer
-  Terminal RS485               picocom -b 9600 --omap crlf --echo /dev/ttyUSB0
-  Theo dõi MQTT                mosquitto_sub -h <broker> -t 'users/admin@example.com/<NNN>/#' -v
-  Trạng thái board (JSON)      curl http://<IP-board>/status
-  Cập nhật code                cd fptUniversity && git pull
-```
-
-## 17. PHỤ LỤC C: BẢNG PHÂN VÙNG FLASH (2 MB, bắt đầu 0x08000000)
-
-```text
-  Phân vùng      Offset     Địa chỉ       Kích thước  Nội dung
-  -------------  ---------  ------------  ----------  -------------------------
-  mcuboot        0x000000   0x08000000    128 KB      Bootloader MCUboot
-  image-0        0x020000   0x08020000    704 KB      Ứng dụng đang chạy
-  image-scratch  0x0D0000   0x080D0000    128 KB      Vùng tạm khi swap
-  image-1        0x0F0000   0x080F0000    704 KB      Ảnh cập nhật
-  config-a       0x1A0000   0x081A0000    32 KB       Cấu hình (bản chính)
-  config-b       0x1A8000   0x081A8000    32 KB       Cấu hình (bản dự phòng)
-  swapmark       0x1B0000   0x081B0000    8 KB        Cờ thao tác NRST swap
-```
-
-## 18. PHỤ LỤC D: THUẬT NGỮ
+## 14. PHỤ LỤC B: THUẬT NGỮ
 
 ```text
   Zephyr       Hệ điều hành thời gian thực (RTOS) mã nguồn mở.
