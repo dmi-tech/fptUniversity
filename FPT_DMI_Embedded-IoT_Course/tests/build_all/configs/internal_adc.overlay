@@ -1,0 +1,14 @@
+/* ADC with the internal channels only (no external pin, no zephyr,user). */
+&adc1 {
+	clocks = <&rcc STM32_CLOCK(AHB2, 10)>,
+		 <&rcc STM32_SRC_HCLK ADCDAC_SEL(0)>;
+	clock-names = "adcx", "adc_ker";
+	st,adc-clock-source = "ASYNC";
+	st,adc-prescaler = <6>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+};
+
+&die_temp { status = "okay"; };
+&vref { status = "okay"; };

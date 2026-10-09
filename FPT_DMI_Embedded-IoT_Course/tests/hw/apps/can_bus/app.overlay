@@ -1,0 +1,7 @@
+/ {
+	can_leds {
+		compatible = "gpio-leds";
+		can_tx_led: can_tx_led { gpios = <&gpiod 11 GPIO_ACTIVE_LOW>; label = "CAN TX"; };
+		can_rx_led: can_rx_led { gpios = <&gpiod 12 GPIO_ACTIVE_LOW>; label = "CAN RX"; };
+	};
+};

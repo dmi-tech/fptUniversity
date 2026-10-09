@@ -17,6 +17,8 @@
 tests/hw/gen/
 tests/hw/build-*
 
-# Temporarily hidden from the repository (files kept locally)
-/docs/
-/tests/
+# Temporarily hidden from the repository (files kept locally): labs
+/docs/labs.md
+/docs/examples/
+/tests/lab_examples/
+/tests/build_all/configs/labs.*

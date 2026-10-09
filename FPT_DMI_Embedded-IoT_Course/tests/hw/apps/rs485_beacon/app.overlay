@@ -1,0 +1,5 @@
+/ {
+	zephyr,user {
+		rs485-de-gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
+	};
+};
