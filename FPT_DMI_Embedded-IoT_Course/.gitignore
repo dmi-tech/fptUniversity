@@ -16,3 +16,7 @@
 /tests/build_all/build*/
 tests/hw/gen/
 tests/hw/build-*
+
+# Temporarily hidden from the repository (files kept locally)
+/docs/
+/tests/

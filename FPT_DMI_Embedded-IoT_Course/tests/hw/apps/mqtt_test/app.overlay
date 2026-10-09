@@ -1,3 +1,0 @@
-&w5500 {
-	local-mac-address = [00 08 DC 01 02 07];
-};

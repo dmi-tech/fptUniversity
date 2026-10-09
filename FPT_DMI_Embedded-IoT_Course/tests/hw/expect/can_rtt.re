@@ -1,1 +1,0 @@
-CAN DIAG start
