@@ -1,0 +1,32 @@
+# west manifest for EmbeddedCourse_FPT_DMI.
+#
+#   west init -l --mf EmbeddedCourse_FPT_DMI/west.yml fptUniversity
+#   (run from the directory that holds the fptUniversity clone)
+#   west update
+#
+# Only the modules this course needs are fetched.
+manifest:
+  version: "1.2"
+
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v4.4.2
+      import:
+        name-allowlist:
+          - cmsis
+          - cmsis_6
+          - hal_stm32
+          - mbedtls
+          - mcuboot
+          - picolibc
+          - segger
+          - tf-psa-crypto
+          - zcbor
+
+  self:
+    path: fptUniversity

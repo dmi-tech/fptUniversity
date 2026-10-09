@@ -1,0 +1,18 @@
+# Build output
+/build/
+/build-*/
+
+# Signing keys never belong in the repository
+*.pem
+*.key
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Test builds
+/tests/build_all/build*/
+tests/hw/gen/
+tests/hw/build-*

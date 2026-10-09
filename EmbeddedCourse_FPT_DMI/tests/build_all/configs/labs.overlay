@@ -1,0 +1,9 @@
+/* Lab 3B: Zephyr Modbus RTU on UART4 (RS485), DE/RE on PC3. The rs485 driver is not used. */
+/delete-node/ &st7920;
+
+&uart4 {
+	modbus0 {
+		compatible = "zephyr,modbus-serial";
+		de-gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
+	};
+};

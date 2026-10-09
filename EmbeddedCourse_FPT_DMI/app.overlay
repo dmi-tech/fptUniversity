@@ -1,0 +1,13 @@
+/*
+ * app.overlay - mô tả phần cứng bổ sung cho ứng dụng của bạn.
+ *
+ * KHÔNG sửa file board (boards/st/stm32h573ri_custom/). Mọi thay đổi đặt ở đây.
+ *
+ * TODO (Sinh viên): dán đoạn overlay trong README của driver vào đây.
+ * Hướng dẫn chung: driver/README.md mục 2 và 3.
+ *
+ * Lưu ý:
+ *  - Dòng #include phải nằm ở ĐẦU file.
+ *  - Một nhãn (label) chỉ được khai báo MỘT lần.
+ *  - Hai driver không được dùng chung một chân (driver/README.md mục 3.3).
+ */

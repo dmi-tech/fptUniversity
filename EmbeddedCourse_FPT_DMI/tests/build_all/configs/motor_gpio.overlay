@@ -1,0 +1,16 @@
+/* Motor in GPIO mode (on/off only): no PWM node, so driver_pwm must not be needed. */
+/ {
+	motor_gpio {
+		compatible = "gpio-leds";
+		motor: motor_0 {
+			gpios = <&gpioa 2 GPIO_ACTIVE_HIGH>;
+			label = "Motor";
+		};
+	};
+
+	aliases {
+		motor0 = &motor;
+	};
+};
+
+&usart2 { status = "disabled"; };
