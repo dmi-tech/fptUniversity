@@ -24,7 +24,7 @@ static const char HTML_LOGIN[] =
 ".err{color:#c00;font-size:12px;margin-top:12px;min-height:16px}"
 "</style></head><body>"
 "<div class=\"card\">"
-"<div class=\"logo\">fw_showcase</div>"
+"<div class=\"logo\">DMI<br>Dashboard</div>"
 "<div class=\"sub\">Device Configuration Portal</div>"
 "<form method=\"POST\" action=\"/login\">"
 "<label>Password:</label>"

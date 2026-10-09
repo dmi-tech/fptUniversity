@@ -2,8 +2,10 @@
  *
  *   relay 1 (PB5)  blinks with a 1 s period (500 ms on / 500 ms off) while
  *                  the alarm is active
- *   motor  (PA2)   started on an alarm, stopped again when it clears unless
- *                  switched by hand meanwhile (see motor.h)
+ *                  (any reason: thresholds or DHT11 failure)
+ *   motor  (Relay 3, PA15)  started only while the reason is T_HIGH, stopped
+ *                  again when it no longer is, unless switched by hand
+ *                  meanwhile (see motor.h)
  */
 #include "alarm.h"
 #include "motor.h"
@@ -18,6 +20,7 @@ static const struct gpio_dt_spec s_relay  = GPIO_DT_SPEC_GET(DT_ALIAS(relay1), g
 static bool              s_active;
 static enum alarm_reason s_reason;
 static int               s_fails;
+static bool              s_motor_req;   /* alarm wants the motor (T_HIGH) */
 
 static struct k_timer s_blink_timer;
 
@@ -84,16 +87,23 @@ enum alarm_event alarm_update(bool ok, int temp_c, int humi_pct)
     bool now_active = (r != ALARM_REASON_NONE);
     s_reason = r;
 
+    /* Only an over-temperature runs the motor; the other reasons just blink
+     * relay 1. Acting on the change keeps a manual OFF in force. */
+    bool motor_req = (r == ALARM_REASON_T_HIGH);
+    if (motor_req != s_motor_req) {
+        s_motor_req = motor_req;
+        if (motor_req) motor_alarm_start();
+        else           motor_alarm_clear();
+    }
+
     if (now_active && !s_active) {
         s_active = true;
         blink_start();
-        motor_alarm_start();
         return ALARM_EVT_START;
     }
     if (!now_active && s_active) {
         s_active = false;
         blink_stop();
-        motor_alarm_clear();
         return ALARM_EVT_CLEAR;
     }
     return ALARM_EVT_NONE;

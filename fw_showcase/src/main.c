@@ -1,6 +1,6 @@
 /* fw_showcase: DHT11 (PC2) -> 20x4 LCD (PCF8574, I2C1), live web page, MQTT
  * status every 30 s, abnormal value -> RS485 alarm + relay 1 blink + motor.
- * Motor (PA2): web switch, RS485 ON/OFF, PA10 button or the alarm.
+ * Motor (Relay 3, PA15): web switch, RS485 ON/OFF, PA10 button or the alarm.
  * Config stored in flash — load at boot, edit via browser */
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>

@@ -2,12 +2,13 @@
 #define MOTOR_H
 #include <stdbool.h>
 
-/* Motor output (PA2, high = run) and the PA10 toggle button.
+/* Motor output (Relay 3 PA15, high = run) and the PA10 toggle button.
  *
  * Four sources can switch the motor: the web page, an RS485 ON/OFF line, the
  * button and the alarm. Web / RS485 / button are manual and are never undone
- * automatically. A motor started by the ALARM is switched off when the alarm
- * clears; a manual OFF during an alarm holds until the next alarm start. */
+ * automatically. The ALARM starts it only on over-temperature (T_HIGH) and
+ * switches it off when that ends; a manual OFF meanwhile holds until the
+ * next over-temperature. */
 enum motor_src {
     MOTOR_SRC_NONE = 0,
     MOTOR_SRC_ALARM,
@@ -16,7 +17,7 @@ enum motor_src {
     MOTOR_SRC_RS485,
 };
 
-/* Configure PA2 and the PA10 button interrupt */
+/* Configure the motor relay (PA15) and start polling the PA10 button */
 bool motor_init(void);
 
 /* Manual switch from the web page, RS485 or the button */

@@ -2,7 +2,7 @@
  * fw_showcase: DHT11 + alarm motor on the Base Board U16 expansion header.
  *
  *   U16-5  PC2  DHT11 DATA   (SPI2 MISO on the board, SPI2 disabled below)
- *   U16-4  PA2  motor driver (USART2 TX, USART2 disabled below), active high
+ *   CN3-5/6     Relay 3 (PA15) switches the motor, high = on
  *   U16-10 PB6  I2C1 SCL -> PCF8574 backpack of the 20x4 LCD
  *   U16-9  PB9  I2C1 SDA -> PCF8574 backpack of the 20x4 LCD
  *   U16-12 PA10 button      (unchanged, toggles the motor)
@@ -23,17 +23,10 @@
 		dio-gpios = <&gpioc 2 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
 	};
 
-	motor_output {
-		compatible = "gpio-leds";
-		/* Motor driver (transistor/MOSFET module) input, high = motor on */
-		motor: motor_0 {
-			gpios = <&gpioa 2 GPIO_ACTIVE_HIGH>;
-			label = "Motor";
-		};
-	};
-
 	aliases {
-		motor0 = &motor;
+		/* Motor switched by Relay 3 (PA15, high = contact closed):
+		 * supply (+) -> CN3-5 COM3, CN3-6 OUT3 -> motor -> supply (-) */
+		motor0 = &relay_3;
 		dht0 = &dht11;
 	};
 };
@@ -42,7 +35,7 @@
 &fdcan1 { status = "disabled"; };
 &sdmmc1 { status = "disabled"; };
 &usart1 { status = "disabled"; };
-&usart2 { status = "disabled"; };  /* PA2 is now the motor output */
+&usart2 { status = "disabled"; };  /* PA2/PA3 free on U16 */
 &usart6 { status = "disabled"; };
 &sht41  { status = "disabled"; };  /* replaced by the DHT11 */
 &i2c2   { status = "disabled"; };

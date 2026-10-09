@@ -51,28 +51,29 @@ liên tục quanh ngưỡng.
 Khi cảnh báo **bắt đầu**:
 - Gửi tin RS485 `ALARM` ngay, và lặp lại mỗi 10 giây trong khi còn cảnh báo.
 - **Relay 1** nháy (500 ms bật / 500 ms tắt).
-- **Motor** bật.
+- **Motor** bật, chỉ với cảnh báo **nhiệt độ cao**. Cảnh báo độ ẩm và lỗi
+  cảm biến chỉ nháy relay 1.
 - LCD hiện cảnh báo.
 - Web/MQTT được cập nhật ngay.
 
 Khi cảnh báo **kết thúc**:
 - Gửi tin RS485 `CLEAR`.
 - Tắt relay.
-- Tắt motor nếu motor do cảnh báo bật.
+- Tắt motor nếu motor do cảnh báo nhiệt độ cao bật.
 
-Các ngưỡng nằm trong [`src/app/alarm.h`](src/app/alarm.h).
+Các ngưỡng nằm trong [`src/modules/Alarm/alarm.h`](src/modules/Alarm/alarm.h).
 
 ### Motor
-Bốn nguồn có thể bật/tắt motor (PA2):
+Bốn nguồn có thể bật/tắt motor (Relay 3, PA15):
 - **công tắc ON/OFF trên trang web**;
 - dòng **`ON` / `OFF` qua RS485**;
-- **nút PA10**, bấm để đảo trạng thái (dùng ngắt, chống dội 50 ms);
-- **cảnh báo**, khi bắt đầu sẽ bật motor.
+- **nút PA10**, mỗi lần nhấn rồi thả đảo trạng thái một lần (quét 10 ms/lần, mức phải giữ khoảng 50 ms mới được tính);
+- **cảnh báo nhiệt độ cao** (> 40 °C), khi bắt đầu sẽ bật motor.
 
 Quy tắc:
-- Motor do **cảnh báo** bật sẽ tự tắt khi cảnh báo kết thúc.
+- Motor do **cảnh báo nhiệt độ cao** bật sẽ tự tắt khi nhiệt độ về bình thường.
 - Motor bật bằng tay (web, RS485 hoặc nút nhấn) thì không bao giờ tự tắt.
-- Tắt bằng tay trong lúc đang cảnh báo thì motor giữ tắt đến lần cảnh báo kế tiếp.
+- Tắt bằng tay trong lúc đang quá nhiệt thì motor giữ tắt đến lần quá nhiệt kế tiếp.
 - Trang web hiển thị nguồn thao tác gần nhất, ví dụ `(by RS485)`.
 
 ### RS485 (gửi và nhận)
@@ -165,12 +166,11 @@ MQTT). `motor_by` là `web`, `RS485`, `button`, `alarm` hoặc rỗng. `/status`
 
 | Chân U16 | Chân MCU | Chức năng                                | Ghi chú |
 | -------- | -------- | ---------------------------------------- | ------- |
-| 1, 2     | +5V      | Cấp nguồn DHT11 / LCD / driver motor     | tùy nhu cầu |
+| 1, 2     | +5V      | Cấp nguồn DHT11 / LCD                    | |
 | 17, 18   | GND      | Mass chung                               | |
 | 5        | PC2      | DHT11 DATA                               | open drain; thêm điện trở kéo lên 4.7k-10k về 3V3 nếu module chưa có |
 | 10       | PB6      | I2C1 SCL → module PCF8574 của LCD        | 100 kHz |
 | 9        | PB9      | I2C1 SDA → module PCF8574 của LCD        | 100 kHz |
-| 4        | PA2      | Ngõ vào driver motor, mức cao = chạy     | **không nối motor trực tiếp**: dùng transistor/MOSFET hoặc module driver có diode chống ngược |
 | 12       | PA10     | Nút nhấn, tích cực mức thấp (pull-up nội) | bật/tắt motor |
 
 ### Ngoại vi trên board
@@ -179,7 +179,8 @@ MQTT). `motor_by` là `web`, `RS485`, `button`, `alarm` hoặc rỗng. `/status`
 | ------------------ | ---------------------------------------------------------------- |
 | Ethernet W5500     | SPI1: SCK PA5, MISO PA6, MOSI PA7, CS PA4; INT PC4, RESET PC5     |
 | RS485              | UART4: TX PA0, RX PA1; DE/RE (hướng) PC3                         |
-| Relay 1            | PB5 (mức cao = đóng)                                             |
+| Relay 1            | PB5 (mức cao = đóng), nháy khi có cảnh báo                       |
+| Relay 3            | PA15 (mức cao = đóng), đóng cắt motor qua CN3-5 COM3 / CN3-6 OUT3 |
 | LED LIFE           | PA8 (tích cực mức thấp)                                          |
 | SWD / console RTT  | PA13 SWDIO, PA14 SWCLK                                           |
 
@@ -340,32 +341,39 @@ fptUniversity/fw_showcase/
 │   └── flash.sh             build + nạp qua ST-LINK
 └── src/
     ├── main.c               trình tự khởi động và vòng lặp chính
-    ├── app/                 logic ứng dụng
-    │   ├── alarm.c/.h         ngưỡng, nháy relay
-    │   ├── alarm_notify.c/.h  tin RS485 ALARM/CLEAR
-    │   ├── motor.c/.h         ngõ ra motor, nút PA10, quy tắc ai được tắt/bật
-    │   ├── rs485_cmd.c        thread xử lý lệnh RS485 ON/OFF
-    │   ├── app_config.c/.h    cấu hình, lưu flash A/B
-    │   ├── app_state.c/.h     trạng thái dùng chung giữa main loop, web, MQTT
-    │   └── version.h
-    ├── drivers/             driver ngoại vi
-    │   ├── dht11.c/.h         DHT11 (driver aosong,dht của Zephyr)
-    │   ├── lcd_pcf8574.c/.h   HD44780 20x4 qua PCF8574
-    │   └── rs485.c/.h         UART4 + chân hướng, nhận từng dòng
-    ├── net/                 mạng
-    │   ├── network.c/.h       bật Ethernet, DHCP / IP tĩnh
-    │   ├── http.c/.h          hàm hỗ trợ HTTP
-    │   ├── web_server.c       route, đăng nhập, trang cấu hình, công cụ /api
-    │   ├── web_pages.h        HTML / CSS / JS
-    │   ├── mqtt_app.c/.h      thread MQTT client
-    │   └── mqtt_ca.h          chứng chỉ gốc TLS (ISRG Root X1)
-    ├── system/
-    │   ├── boot_swap.c/.h     confirm image, chuyển image bằng NRST
-    │   └── status_led.c/.h    heartbeat LED LIFE
-    ├── ui/
-    │   └── lcd_view.c/.h      bố cục màn hình LCD
-    └── config/
-        └── mbedtls_user_config.h   kích thước buffer TLS
+    └── modules/             mỗi module một thư mục
+        ├── Alarm/
+        │   ├── alarm.c/.h         ngưỡng, nháy relay
+        │   └── alarm_notify.c/.h  tin RS485 ALARM/CLEAR
+        ├── Boot/
+        │   └── boot_swap.c/.h     confirm image, chuyển image bằng NRST
+        ├── Config/
+        │   ├── app_config.c/.h    cấu hình, lưu flash A/B
+        │   ├── app_state.c/.h     trạng thái dùng chung giữa main loop, web, MQTT
+        │   └── version.h
+        ├── DHT11/
+        │   └── dht11.c/.h         DHT11 (driver aosong,dht của Zephyr)
+        ├── LCD/
+        │   ├── lcd_pcf8574.c/.h   HD44780 20x4 qua PCF8574
+        │   └── lcd_view.c/.h      bố cục màn hình LCD
+        ├── Motor/
+        │   └── motor.c/.h         ngõ ra motor, nút PA10, quy tắc ai được tắt/bật
+        ├── MQTT/
+        │   ├── mqtt_app.c/.h      thread MQTT client
+        │   ├── mqtt_ca.h          chứng chỉ gốc TLS (ISRG Root X1)
+        │   └── TLS/
+        │       └── mbedtls_user_config.h   kích thước buffer TLS
+        ├── Network/
+        │   └── network.c/.h       bật Ethernet, DHCP / IP tĩnh
+        ├── RS485/
+        │   ├── rs485.c/.h         UART4 + chân hướng, nhận từng dòng
+        │   └── rs485_cmd.c        thread xử lý lệnh RS485 ON/OFF
+        ├── StatusLED/
+        │   └── status_led.c/.h    heartbeat LED LIFE
+        └── WebServer/
+            ├── http.c/.h          hàm hỗ trợ HTTP
+            ├── web_server.c       route, đăng nhập, trang cấu hình, công cụ /api
+            └── web_pages.h        HTML / CSS / JS
 ```
 
 Web server, MQTT client và bộ xử lý lệnh RS485 mỗi cái chạy trong một thread

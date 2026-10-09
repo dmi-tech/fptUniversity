@@ -51,29 +51,31 @@ When an alarm **starts**:
 - An RS485 `ALARM` message is sent at once and repeated every 10 s while the
   alarm is active.
 - **Relay 1** blinks (500 ms on / 500 ms off).
-- The **motor** turns on.
+- The **motor** turns on, only for **temperature high**. Humidity alarms and
+  a sensor fault just blink relay 1.
 - The LCD shows the warning.
 - Web and MQTT are updated at once.
 
 When it **clears**:
 - An RS485 `CLEAR` message is sent.
 - The relay turns off.
-- The motor turns off if the alarm started it.
+- The motor turns off if the temperature-high alarm started it.
 
-Thresholds are in [`src/app/alarm.h`](src/app/alarm.h).
+Thresholds are in [`src/modules/Alarm/alarm.h`](src/modules/Alarm/alarm.h).
 
 ### Motor
-Four sources can switch the motor (PA2):
+Four sources can switch the motor (Relay 3, PA15):
 - the **ON/OFF switch on the web page**;
 - an **RS485 `ON` / `OFF`** line;
-- the **PA10 button**, which toggles it (interrupt driven, 50 ms debounce);
-- the **alarm**, which turns it on.
+- the **PA10 button**, which toggles it once per click (press then release; polled every 10 ms, a level must hold ~50 ms);
+- the **temperature-high alarm** (> 40 °C), which turns it on.
 
 Rules:
-- If the **alarm** turned the motor on, it turns off when the alarm clears.
+- If the **temperature-high alarm** turned the motor on, it turns off when the
+  temperature is back to normal.
 - If it was switched by hand (web, RS485 or button), it is never turned off
   automatically.
-- A manual OFF during an alarm holds until the next alarm starts.
+- A manual OFF during an over-temperature holds until the next one.
 - The web page shows who switched it last, for example `(by RS485)`.
 
 ### RS485 (send and receive)
@@ -168,12 +170,11 @@ DHT11 reads). Web values are updated after every DHT11 read.
 
 | U16 pin | MCU pin | Function                                     | Notes |
 | ------- | ------- | -------------------------------------------- | ----- |
-| 1, 2    | +5V     | Supply for DHT11 / LCD / motor driver        | as needed |
+| 1, 2    | +5V     | Supply for DHT11 / LCD                       | |
 | 17, 18  | GND     | Common ground                                | |
 | 5       | PC2     | DHT11 DATA                                   | open drain; add a 4.7k-10k pull-up to 3V3 if the module has none |
 | 10      | PB6     | I2C1 SCL → LCD PCF8574 backpack              | 100 kHz |
 | 9       | PB9     | I2C1 SDA → LCD PCF8574 backpack              | 100 kHz |
-| 4       | PA2     | Motor driver input, active high              | **do not drive a motor directly**: use a transistor/MOSFET or a driver module with a flyback diode |
 | 12      | PA10    | Push button, active low (internal pull-up)   | toggles the motor |
 
 ### On-board peripherals
@@ -182,7 +183,8 @@ DHT11 reads). Web values are updated after every DHT11 read.
 | ------------------ | ---------------------------------------------------------------- |
 | W5500 Ethernet     | SPI1: SCK PA5, MISO PA6, MOSI PA7, CS PA4; INT PC4, RESET PC5     |
 | RS485              | UART4: TX PA0, RX PA1; DE/RE (direction) PC3                     |
-| Relay 1            | PB5 (active high)                                                |
+| Relay 1            | PB5 (active high), blinks on any alarm                           |
+| Relay 3            | PA15 (active high), switches the motor via CN3-5 COM3 / CN3-6 OUT3 |
 | LED LIFE           | PA8 (active low)                                                 |
 | SWD / RTT console  | PA13 SWDIO, PA14 SWCLK                                           |
 
@@ -343,32 +345,39 @@ fptUniversity/fw_showcase/
 │   └── flash.sh             build + flash over ST-LINK
 └── src/
     ├── main.c               start-up sequence and main loop
-    ├── app/                 application logic
-    │   ├── alarm.c/.h         thresholds, relay blink
-    │   ├── alarm_notify.c/.h  RS485 ALARM/CLEAR messages
-    │   ├── motor.c/.h         motor output, PA10 button, who may switch it
-    │   ├── rs485_cmd.c        RS485 ON/OFF command thread
-    │   ├── app_config.c/.h    configuration struct, flash A/B storage
-    │   ├── app_state.c/.h     state shared by main loop, web and MQTT
-    │   └── version.h
-    ├── drivers/             peripheral drivers
-    │   ├── dht11.c/.h         DHT11 (Zephyr aosong,dht driver)
-    │   ├── lcd_pcf8574.c/.h   HD44780 20x4 over PCF8574
-    │   └── rs485.c/.h         UART4 + direction pin, line receiver
-    ├── net/                 networking
-    │   ├── network.c/.h       Ethernet up, DHCP / static IP
-    │   ├── http.c/.h          HTTP helpers
-    │   ├── web_server.c       routes, login, config page, /api tools
-    │   ├── web_pages.h        HTML / CSS / JS
-    │   ├── mqtt_app.c/.h      MQTT client thread
-    │   └── mqtt_ca.h          TLS trust anchor (ISRG Root X1)
-    ├── system/
-    │   ├── boot_swap.c/.h     image confirm, NRST swap gesture
-    │   └── status_led.c/.h    LED LIFE heartbeat
-    ├── ui/
-    │   └── lcd_view.c/.h      LCD screen layout
-    └── config/
-        └── mbedtls_user_config.h   TLS buffer sizes
+    └── modules/             one folder per module
+        ├── Alarm/
+        │   ├── alarm.c/.h         thresholds, relay blink
+        │   └── alarm_notify.c/.h  RS485 ALARM/CLEAR messages
+        ├── Boot/
+        │   └── boot_swap.c/.h     image confirm, NRST swap gesture
+        ├── Config/
+        │   ├── app_config.c/.h    configuration struct, flash A/B storage
+        │   ├── app_state.c/.h     state shared by main loop, web and MQTT
+        │   └── version.h
+        ├── DHT11/
+        │   └── dht11.c/.h         DHT11 (Zephyr aosong,dht driver)
+        ├── LCD/
+        │   ├── lcd_pcf8574.c/.h   HD44780 20x4 over PCF8574
+        │   └── lcd_view.c/.h      LCD screen layout
+        ├── Motor/
+        │   └── motor.c/.h         motor output, PA10 button, who may switch it
+        ├── MQTT/
+        │   ├── mqtt_app.c/.h      MQTT client thread
+        │   ├── mqtt_ca.h          TLS trust anchor (ISRG Root X1)
+        │   └── TLS/
+        │       └── mbedtls_user_config.h   TLS buffer sizes
+        ├── Network/
+        │   └── network.c/.h       Ethernet up, DHCP / static IP
+        ├── RS485/
+        │   ├── rs485.c/.h         UART4 + direction pin, line receiver
+        │   └── rs485_cmd.c        RS485 ON/OFF command thread
+        ├── StatusLED/
+        │   └── status_led.c/.h    LED LIFE heartbeat
+        └── WebServer/
+            ├── http.c/.h          HTTP helpers
+            ├── web_server.c       routes, login, config page, /api tools
+            └── web_pages.h        HTML / CSS / JS
 ```
 
 The web server, the MQTT client and the RS485 command handler each run in

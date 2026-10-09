@@ -1,0 +1,1145 @@
+================================================================================
+                 HƯỚNG DẪN CÀI ĐẶT VÀ CHẠY PROJECT fw_showcase
+                     (dành cho người mới bắt đầu)
+================================================================================
+
+Phiên bản tài liệu : 1.0 (02/10/2026)
+Firmware           : fw_showcase 3.1.0
+Nền tảng           : Zephyr RTOS v4.4.2 + MCUboot, Zephyr SDK 1.0.1
+Board              : Base Board STM32H573RI (E-Desk), tên board Zephyr
+                     "stm32h573ri_custom"
+Nguồn tham chiếu   : mã nguồn trong thư mục này, README.vi.md, và schematic
+                     "Base Board STMH5.pdf" (MCUH5, RS485, Ethernet, In-out
+                     connect, CAN, Power).
+
+Quy ước trong tài liệu:
+  [CẦN BỔ SUNG]   phần người quản lý project phải điền (đường dẫn trong máy
+                  ảo, nơi lấy khóa, ...).
+  [CẦN KIỂM TRA]  điểm chưa xác nhận được trên board thật, hãy đo/kiểm tra
+                  trước khi làm theo.
+  $ lệnh          lệnh gõ trong terminal Linux (không gõ dấu $).
+  LƯU Ý           điều dễ làm sai hoặc dễ gây hỏng phần cứng.
+
+
+MỤC LỤC
+-------
+  0.  Project này làm gì
+  1.  Quy trình tổng quát
+  2.  Thiết bị cần chuẩn bị
+  3.  Bản đồ chân (pin map) của board
+        3.1 Sơ đồ khối nguồn và vùng cách ly
+        3.2 Header mở rộng U16 (2x10, 2.54 mm)
+        3.3 Các cổng CN1 - CN5 (terminal 3.81 mm)
+        3.4 Cổng nạp J3 (SWD), nút nhấn, jack nguồn, USB-C, RJ45
+        3.5 Ngoại vi trên board và chân MCU
+  4.  Đấu nối phần cứng cho fw_showcase (từng bước)
+  5.  Môi trường phần mềm (máy ảo)
+  6.  Khóa ký MCUboot
+  7.  Build firmware
+  8.  Nạp firmware
+  9.  Xem log (console)
+  10. Sử dụng lần đầu
+  11. Kiểm tra từng chức năng (checklist)
+  12. Cấu trúc mã nguồn và các chỉnh sửa thường gặp
+  13. Các lưu ý quan trọng / rủi ro đã biết
+  14. Xử lý sự cố (FAQ)
+  15. Phụ lục A: cài môi trường từ đầu (dành cho người dựng máy ảo)
+  16. Phụ lục B: bảng lệnh hay dùng
+  17. Phụ lục C: bảng phân vùng flash
+  18. Phụ lục D: thuật ngữ
+
+
+================================================================================
+0. PROJECT NÀY LÀM GÌ
+================================================================================
+
+fw_showcase là firmware Zephyr cho board STM32H573RI, dùng để trình diễn một
+hệ thống giám sát nhiệt độ/độ ẩm:
+
+  - Đọc cảm biến DHT11 mỗi 2 giây.
+  - Hiển thị IP, nhiệt độ, độ ẩm, trạng thái MQTT, motor, cảnh báo lên LCD
+    20x4 (giao tiếp I2C qua module PCF8574).
+  - Web server (cổng 80): đăng nhập, dashboard, cấu hình MQTT, bật/tắt motor,
+    gửi chuỗi RS485, Subscribe/Publish MQTT.
+  - MQTT 3.1.1 (QoS 0): gửi trạng thái dạng JSON mỗi 30 giây, hỗ trợ TLS ở
+    cổng 8883.
+  - Cảnh báo khi giá trị vượt ngưỡng hoặc mất dữ liệu DHT11: gửi tin RS485,
+    nháy Relay 1, hiển thị trên LCD. Riêng nhiệt độ cao thì bật thêm motor.
+  - Motor đóng cắt bằng Relay 3 (PA15), có 4 nguồn điều khiển: web, lệnh
+    RS485 ON/OFF, nút nhấn PA10 và cảnh báo nhiệt độ cao.
+  - Khởi động an toàn bằng MCUboot: ảnh firmware ký RSA-2048, chống hạ cấp,
+    cấu hình lưu 2 bản trong flash có CRC.
+
+Mô tả đầy đủ tính năng xem README.vi.md. Tài liệu này tập trung vào việc
+LẮP RÁP, CÀI ĐẶT, BUILD, NẠP và KIỂM TRA.
+
+
+================================================================================
+1. QUY TRÌNH TỔNG QUÁT
+================================================================================
+
+   [Chuẩn bị thiết bị] -> [Đấu nối] -> [Mở máy ảo] -> [Đặt khóa ký]
+        -> [Build] -> [Nạp] -> [Xem log] -> [Cấu hình qua web] -> [Kiểm tra]
+
+  Bước                       Mục    Thời gian ước tính
+  -------------------------  -----  ------------------
+  Chuẩn bị thiết bị          2      tùy
+  Đấu nối phần cứng          3, 4   30 phút
+  Mở máy ảo, kiểm tra env    5      10 phút
+  Đặt khóa ký                6      5 phút
+  Build                      7      3-5 phút
+  Nạp                        8      2 phút
+  Cấu hình web + kiểm tra    10,11  30 phút
+
+
+================================================================================
+2. THIẾT BỊ CẦN CHUẨN BỊ
+================================================================================
+
+2.1 Bắt buộc
+------------
+  STT  Thiết bị                         Ghi chú
+  ---  -------------------------------  ---------------------------------------
+  1    Base Board STM32H573RI (E-Desk)  Board chính.
+  2    Nguồn DC 24 V, >= 1 A            Cắm vào jack DC1 (DC-005) hoặc CN4.
+                                        Cần nguồn 24 V để relay, RS485 phía
+                                        cách ly hoạt động (xem mục 3.1).
+                                        [CẦN KIỂM TRA] kích thước jack (DC-005
+                                        thường là 5.5 x 2.1 mm) và cực tính.
+  3    Mạch nạp ST-LINK (V2 hoặc V3)    Nạp firmware qua SWD.
+       hoặc SEGGER J-Link               J-Link tiện hơn để xem log RTT.
+  4    Cáp nạp cho J3                   J3 là đầu JST-SH 1.0 mm 5 chân
+                                        (BM05B-SRSS). Cần cáp JST-SH 5P sang
+                                        dây dupont để nối với ST-LINK/J-Link.
+  5    Cảm biến DHT11 (dạng module)     Nên dùng module 3 chân có sẵn điện trở
+                                        kéo lên.
+  6    LCD 20x4 (HD44780) + module      Module I2C phổ biến, địa chỉ 0x27 hoặc
+       I2C PCF8574/PCF8574A             0x3F (firmware tự dò).
+  7    Cáp Ethernet + router/switch     Router nên có DHCP. Máy tính (máy ảo)
+                                        phải cùng mạng LAN với board.
+  8    Dây dupont đực                   U16 là header CÁI 2x10 bước 2.54 mm.
+
+2.2 Để chạy đầy đủ demo (khuyến nghị)
+-------------------------------------
+  STT  Thiết bị                         Ghi chú
+  ---  -------------------------------  ---------------------------------------
+  9    Diode 1N4007/SS14 + tụ 100 nF    Mắc song song hai đầu motor để chống
+                                        xung ngược và nhiễu chổi than.
+  10   Motor DC nhỏ + nguồn riêng       Ví dụ motor 5 V. Motor đóng cắt qua
+       cho motor                        Relay 3 trên board (CN3-5/6), không
+                                        cần module driver. Nên dùng nguồn 5 V
+                                        riêng, không lấy từ U16 (xem 4.2 c).
+  11   Nút nhấn thường mở               Nối U16-12 (PA10) với GND.
+  12   Bộ chuyển USB-RS485              Ví dụ loại CH340/FT232 + MAX485. Dùng
+                                        để gửi ON/OFF và xem tin ALARM/CLEAR.
+  13   Tải thử cho Relay 1              Ví dụ đèn 24 V hoặc còi 24 V nối qua
+                                        CN3 (COM1/OUT1).
+  14   MQTT broker                      Mosquitto chạy trong máy ảo/LAN (cổng
+                                        1883) là cách dễ nhất để thử.
+
+2.3 Tùy chọn / dụng cụ
+----------------------
+  - Bộ chuyển USB-UART 3.3 V: xem log của MCUboot ở UART5 (U16-19/U16-20).
+  - Đồng hồ vạn năng: kiểm tra nguồn, cực tính, thông mạch.
+  - Máy sấy tóc hoặc đá lạnh: tạo điều kiện vượt ngưỡng để thử cảnh báo.
+  - Phần mềm terminal: minicom, picocom, CuteCom (Linux) để dùng RS485/UART.
+  - mosquitto-clients (mosquitto_sub, mosquitto_pub) để thử MQTT.
+
+
+================================================================================
+3. BẢN ĐỒ CHÂN (PIN MAP) CỦA BOARD
+================================================================================
+
+Toàn bộ thông tin dưới đây đọc từ schematic "Base Board STMH5.pdf" và đối
+chiếu với devicetree trong boards/st/stm32h573ri_custom/.
+
+3.1 Sơ đồ khối nguồn và vùng cách ly
+------------------------------------
+
+  Jack DC1 --D3--+--> +24V ---+--> URB2405YMD-20WR3 (DC-DC cách ly) --> +5V
+  (24 V)         |            |                                         |
+  CN4 ---------- +            |                                    TPS56320
+  (+24V/GND-ISO)              |                                         |
+                              +--> TPS54335 (buck) --> +5V-ISO        +3V3
+                                                      (relay, RS485,  (MCU,
+                                                       CAN phía cách   W5500,
+                                                       ly, ngõ vào)    LCD I2C)
+  USB-C (VBUS) --F1--D1--> +5V   (chỉ cấp cho phía logic)
+
+  Có HAI vùng đất (GND) tách biệt về điện:
+    - GND      : phía logic (MCU, U16, J3, USB-C, Ethernet).
+    - GND-ISO  : phía hiện trường (CN1, CN2, CN3, CN4, CN5, nguồn 24 V).
+
+  LƯU Ý:
+    - Chỉ cắm USB-C thì MCU chạy được, nhưng relay, RS485, CAN và ngõ vào
+      cách ly KHÔNG có nguồn (chúng dùng +5V-ISO lấy từ 24 V). Để chạy đủ
+      demo phải cấp 24 V.
+    - Không nối GND với GND-ISO nếu không thật sự cần, sẽ mất tác dụng cách ly.
+    - Theo datasheet linh kiện: TPS54335 chịu tối đa 28 V ở ngõ vào, nên
+      KHÔNG cấp quá 24-28 V.
+    - CN4 nối thẳng vào đường +24V, nằm SAU diode chống ngược cực D3 của
+      jack DC1. Cấp nguồn qua CN4 thì phải kiểm tra cực tính thật kỹ.
+
+3.2 Header mở rộng U16 (header cái 2x10, bước 2.54 mm, PM2.54-2X10P)
+---------------------------------------------------------------------
+
+  Nhìn từ trên xuống, chân 1 có dấu tròn:
+
+        +------+------+
+   +5V  |  1   |  2   |  +5V
+   PA3  |  3   |  4   |  PA2
+   PC2  |  5   |  6   |  PC1
+   PC0  |  7   |  8   |  PE0
+   PB9  |  9   |  10  |  PB6
+   PA9  |  11  |  12  |  PA10  <== NÚT NHẤN (fw_showcase)
+   PC7  |  13  |  14  |  PC6
+   PB15 |  15  |  16  |  PB14
+   GND  |  17  |  18  |  GND
+   PB13 |  19  |  20  |  PB12
+        +------+------+
+
+  Chân  Tên net (schematic)  Chức năng gốc trên board  Dùng trong fw_showcase
+  ----  -------------------  ------------------------  -------------------------
+  1     +5V                  Nguồn 5 V                 VCC cho DHT11, LCD
+  2     +5V                  Nguồn 5 V                 (như chân 1)
+  3     PA3-RX2              USART2 RX                 không dùng
+  4     PA2-TX2              USART2 TX                 không dùng (USART2 tắt)
+  5     PC2-SPI2-MISO        SPI2 MISO                 DHT11 DATA (open-drain)
+  6     PC1-SPI2-MOSI        SPI2 MOSI                 không dùng (SPI2 tắt)
+  7     PC0-SPI2-CS          SPI2 CS                   không dùng
+  8     PE0                  GPIO                      không dùng
+  9     PB9-I2C1-SDA         I2C1 SDA                  LCD SDA (100 kHz)
+  10    PB6-I2C1-SCL         I2C1 SCL                  LCD SCL (100 kHz)
+  11    PA9-SPI2-SCK         SPI2 SCK                  không dùng
+  12    PA10                 GPIO                      NÚT NHẤN (tích cực mức
+                                                       thấp, pull-up nội)
+  13    PC7-RX6              USART6 RX                 không dùng (USART6 tắt)
+  14    PC6-TX6              USART6 TX                 không dùng
+  15    PB15-RX1             USART1 RX                 không dùng (USART1 tắt)
+  16    PB14-TX1             USART1 TX                 không dùng
+  17    GND                  Đất logic                 GND chung cho thiết bị
+  18    GND                  Đất logic                 GND chung cho thiết bị
+  19    PB13-TX5             UART5 TX                  Log của MCUboot (115200)
+  20    PB12-RX5             UART5 RX                  Log của MCUboot
+
+  LƯU Ý về U16:
+    - U16 KHÔNG có chân 3.3 V. Thiết bị ngoài lấy nguồn 5 V từ chân 1/2.
+    - Module DHT11/LCD cấp 5 V sẽ kéo đường DATA/SDA/SCL lên 5 V.
+      [CẦN KIỂM TRA] PC2, PB6, PB9, PA10 có chịu được 5 V không (loại chân
+      "FT" trong bảng "Pin definitions" của datasheet STM32H573). Nếu không
+      chắc, cấp 3.3 V cho module từ nguồn ngoài, hoặc dùng mạch chuyển mức.
+    - Schematic ghi chú "SPI2 Tuning" cho nhóm chân 2-10. Board gốc định
+      dùng U16 cho module ESP32/SPI2. fw_showcase đã tắt SPI2/USART1/2/6 để
+      dùng lại chân (xem boards/stm32h573ri_custom.overlay).
+
+3.3 Các cổng CN1 - CN5 (terminal bước 3.81 mm, thuộc vùng GND-ISO)
+-------------------------------------------------------------------
+
+  CN1 - RS485 (4 chân)                          fw_showcase: CÓ DÙNG
+    Chân  Tín hiệu   Ghi chú
+    ----  ---------  -------------------------------------------------------
+    1     RS485A     Đường A (D+) của bus RS485 cách ly (ISO3088)
+    2     RS485B     Đường B (D-)
+    3     +24V       Nguồn 24 V cấp ra cho thiết bị RS485 (KHÔNG nối vào bộ
+                     chuyển USB-RS485)
+    4     GND-ISO    Đất phía cách ly
+
+    - Board có sẵn điện trở đầu cuối 120 ohm (R21) giữa A và B, cùng TVS bảo
+      vệ (D6, D7, D8).
+    - Hướng truyền (DE/RE) có 2 cách, chọn bằng điện trở 0 ohm:
+        R88 lắp  -> MCU điều khiển bằng PC3   (fw_showcase CẦN cách này)
+        R87 lắp  -> mạch NE555 tự điều khiển
+      [CẦN KIỂM TRA] trên board thật: R88 có lắp, R87 không lắp.
+    - LED1 trên board nháy theo TX/RX của RS485.
+
+  CN2 - Ngõ vào số cách ly (8 chân)             fw_showcase: KHÔNG DÙNG
+    Chân  Tín hiệu   Ghi chú
+    ----  ---------  -------------------------------------------------------
+    1     +24V       Nguồn 24 V cấp cho cảm biến/công tắc
+    2     GND-ISO    Đất phía cách ly
+    3     IN1        Ngõ vào 1 (opto PC814, điện trở nối tiếp 4.7k)
+    4     COM1       Chân chung của ngõ vào 1
+    5     IN2        Ngõ vào 2
+    6     COM2       Chân chung của ngõ vào 2
+    7     IN3        Ngõ vào 3
+    8     COM3       Chân chung của ngõ vào 3
+
+    - Đưa điện áp 24 V vào giữa INx và COMx thì ngõ vào được kích. PC814 là
+      opto hai chiều nên không phân biệt cực tính.
+    - Phía MCU: IN1 = PC13, IN2 = PC14, IN3 = PC15, tích cực mức thấp.
+
+  CN3 - Ngõ ra relay (6 chân)                   fw_showcase: DÙNG RELAY 1, 3
+    Chân  Tín hiệu   Ghi chú
+    ----  ---------  -------------------------------------------------------
+    1     COM1       Tiếp điểm chung của Relay 1  <== nháy khi có cảnh báo
+    2     OUT1       Tiếp điểm ra của Relay 1
+    3     COM2       Relay 2 (không dùng)
+    4     OUT2       Relay 2
+    5     COM3       Tiếp điểm chung của Relay 3  <== đóng cắt MOTOR
+    6     OUT3       Tiếp điểm ra của Relay 3
+
+    - Relay HF46F-005-HS1, cuộn dây 5 V lấy từ +5V-ISO (phải có nguồn 24 V).
+    - Đây là tiếp điểm KHÔ: relay chỉ đóng/ngắt mạch, KHÔNG cấp điện. Nối tải
+      theo kiểu: nguồn tải (+) -> COM1, OUT1 -> tải -> nguồn tải (-).
+      [CẦN KIỂM TRA] loại tiếp điểm (NO) và dòng/áp tối đa trong datasheet
+      relay. Với demo, chỉ nên đóng cắt tải nhỏ, điện áp thấp (<= 24 VDC).
+    - Phía MCU: RL1 = PB5, RL2 = PB4, RL3 = PA15 (mức cao = relay đóng).
+      LƯU Ý: tên net trên schematic bị ngược với dây thực tế ("PA15-RL-OUT1",
+      "PB5-RL-OUT3"). Theo dây nối qua ISO7730 (U12), PB5 mới là Relay 1.
+      Devicetree đã đi theo dây thực tế.
+    - Mỗi relay có LED báo (LED2, LED3, LED4).
+
+  CN4 - Nguồn 24 V (2 chân)                     fw_showcase: nguồn cho board
+    Chân  Tín hiệu   Ghi chú
+    ----  ---------  -------------------------------------------------------
+    1     +24V       Ngõ vào/ra 24 V (song song với jack DC1)
+    2     GND-ISO    Đất phía cách ly
+
+    LƯU Ý: không có diode chống ngược cực cho CN4 (xem mục 3.1).
+
+  CN5 - CAN FD cách ly (4 chân)                 fw_showcase: KHÔNG DÙNG
+    Chân  Tín hiệu   Ghi chú
+    ----  ---------  -------------------------------------------------------
+    1     CANH       Qua cuộn lọc L5
+    2     CANL       Qua cuộn lọc L5
+    3     GND-ISO    Đất phía cách ly
+    4     +24V       Nguồn 24 V cấp ra theo cáp CAN
+
+    - Phía MCU: FDCAN1 TX = PB7, RX = PB8, chân S của TCAN1057 = PB0.
+      fw_showcase tắt FDCAN1.
+
+3.4 Cổng nạp J3, nút nhấn, jack nguồn, USB-C, RJ45
+--------------------------------------------------
+
+  J3 - SWD (JST-SH 1.0 mm, 5 chân, BM05B-SRSS)
+    Chân  Tín hiệu        Nối với ST-LINK / J-Link
+    ----  --------------  -------------------------------------------------
+    1     PB3 (SWO)       SWO (không bắt buộc)
+    2     PA13 (SWDIO)    SWDIO
+    3     GND             GND
+    4     PA14 (SWCLK)    SWCLK
+    5     +3V3-STM        VTref / TVCC (chân đo điện áp tham chiếu).
+                          KHÔNG dùng chân này để cấp nguồn cho board.
+
+    LƯU Ý: J3 KHÔNG có chân NRST. Xem mục 14 nếu nạp báo lỗi reset/kết nối.
+
+  Nút nhấn trên board:
+    SW1 "Reset"  -> NRST: reset MCU. Dùng cho thao tác "NRST swap" (mục 8.4).
+    SW2 "Boot"   -> BOOT0: giữ khi cấp nguồn/reset để vào bootloader ROM của
+                    ST. Bình thường KHÔNG cần dùng.
+
+  Jack DC1 (DC-005): ngõ vào 24 V, có diode SS54 chống ngược cực.
+  USB-C (USB1): cấp 5 V phía logic. fw_showcase không dùng chức năng USB.
+  RJ45 (J1, HR911105A): Ethernet qua chip W5500, có LED Link/Act.
+
+3.5 Ngoại vi trên board và chân MCU
+-----------------------------------
+
+  Ngoại vi            Chân MCU                            Trạng thái trong
+                                                          fw_showcase
+  ------------------  ----------------------------------  ----------------
+  W5500 Ethernet      SPI1: SCK PA5, MISO PA6, MOSI PA7,  Dùng
+                      CS PA4, INT PC4, RESET PC5
+  RS485 (ISO3088)     UART4: TX PA0, RX PA1, DIR PC3      Dùng (9600 8N1)
+  Relay 1/2/3         PB5 / PB4 / PA15                    Relay 1 (cảnh
+                                                          báo), Relay 3
+                                                          (motor)
+  Ngõ vào 1/2/3       PC13 / PC14 / PC15                  Không dùng
+  LED LIFE (LED5)     PA8 (tích cực mức thấp)             Dùng (heartbeat)
+  CAN FD (TCAN1057)   FDCAN1: TX PB7, RX PB8, S PB0       Tắt
+  LED CAN TX/RX       PD11 / PD12                         Không dùng
+  SHT41               I2C2: SCL PB10, SDA PB11, 0x44      Tắt (thay DHT11)
+  Thẻ microSD         SDMMC1: PC8-PC12, PB2               Tắt
+  Còi (buzzer)        PB1                                 Không dùng
+  USB                 PA11 / PA12                         Không dùng
+  Console UART5       TX PB13, RX PB12 (ra U16-19/20)     MCUboot dùng
+  SWD                 PA13 SWDIO, PA14 SWCLK, PB3 SWO     Nạp + log RTT
+  Thạch anh           25 MHz (PH0/PH1)                    MCU chạy HSI+PLL
+                                                          250 MHz
+
+
+================================================================================
+4. ĐẤU NỐI PHẦN CỨNG CHO fw_showcase (TỪNG BƯỚC)
+================================================================================
+
+  LƯU Ý: TẮT NGUỒN board trước khi đấu dây.
+
+4.1 Bảng đấu nối tóm tắt
+------------------------
+
+  Thiết bị              Chân thiết bị   Nối vào board
+  --------------------  --------------  -------------------------------------
+  DHT11                 VCC (+)         U16-1 (+5V)
+                        DATA (OUT)      U16-5 (PC2)
+                        GND (-)         U16-17 (GND)
+  LCD 20x4 + PCF8574    VCC             U16-2 (+5V)
+                        GND             U16-18 (GND)
+                        SDA             U16-9 (PB9)
+                        SCL             U16-10 (PB6)
+  Motor (qua Relay 3)   nguồn (+)       CN3-5 (COM3)
+                        Motor (+)       CN3-6 (OUT3)
+                        Motor (-)       GND của CÙNG nguồn motor
+  Nút nhấn              chân 1          U16-12 (PA10)
+                        chân 2          U16-17 hoặc U16-18 (GND)
+  USB-RS485             A (D+)          CN1-1 (RS485A)
+                        B (D-)          CN1-2 (RS485B)
+                        GND             CN1-4 (GND-ISO), nên nối
+  Tải Relay 1           -               CN3-1 (COM1), CN3-2 (OUT1)
+  Mạch nạp              SWD             J3 (xem mục 3.4)
+  Ethernet              -               RJ45 J1 -> router/switch
+  Nguồn                 24 V            Jack DC1 (hoặc CN4, đúng cực tính)
+  (Tùy chọn) USB-UART   RX              U16-19 (PB13, TX của board)
+  3.3 V                 TX              U16-20 (PB12, RX của board)
+                        GND             U16-17/18
+
+4.2 Chi tiết từng thiết bị
+--------------------------
+
+  a) DHT11
+     - Dùng module có sẵn điện trở kéo lên. Nếu dùng cảm biến trần 4 chân,
+       phải tự thêm điện trở 4.7k-10k giữa DATA và VCC.
+     - Firmware cấu hình PC2 kiểu open-drain + pull-up nội (yếu), nên vẫn
+       cần điện trở kéo lên bên ngoài.
+     - Dây không nên dài quá 1 m.
+
+  b) LCD 20x4
+     - Firmware tự dò địa chỉ: thử 0x27, 0x3F trước, sau đó quét
+       0x20-0x27 và 0x38-0x3F. Không cần chỉnh code khi đổi module.
+     - Nếu LCD sáng nhưng không thấy chữ: vặn biến trở độ tương phản (màu
+       xanh) trên module PCF8574.
+     - Rút/cắm LCD khi đang chạy: firmware dò lại mỗi 10 giây.
+
+  c) Motor (Relay 3, PA15)
+     - Relay 3 là tiếp điểm KHÔ: phải đưa nguồn vào COM3.
+         nguồn (+) -> CN3-5 (COM3), CN3-6 (OUT3) -> Motor (+),
+         Motor (-) -> nguồn (-).
+       Dương và âm phải lấy từ CÙNG một nguồn.
+     - KHÔNG nối motor vào chân GPIO nào (kể cả để làm GND): chân MCU chỉ
+       cấp/nhận khoảng 20 mA, motor cần vài trăm mA, chân bị kéo sụt và hỏng.
+     - KHÔNG nối Motor (-) vào GND-ISO (CN1/CN4) khi lấy nguồn ở U16: hai vùng
+       đất cách ly nên mạch không khép kín.
+     - Nên dùng nguồn 5 V riêng cho motor. Lấy +5V/GND ở U16 thì dòng khởi
+       động và nhiễu chổi than có thể làm sụt nguồn logic, MCU treo/reset.
+     - Mắc diode (catot về Motor +) và tụ 100 nF song song hai đầu motor.
+     - Relay 3 chỉ đóng khi có nguồn 24 V (cuộn relay dùng +5V-ISO).
+
+  d) Nút nhấn
+     - Nút thường mở, nối giữa PA10 và GND. Không cần điện trở (đã có pull-up
+       nội). Firmware quét nút mỗi 10 ms, mức phải giữ khoảng 50 ms mới
+       được tính. Mỗi lần NHẤN RỒI THẢ là một lần bấm (đổi lúc thả tay).
+     - Nếu được, không dùng chung chân GND giữa nút và motor.
+
+  e) RS485
+     - Kiểm tra R88 có lắp, R87 không lắp (mục 3.3).
+     - Nếu bus ngắn và chỉ có 2 thiết bị, điện trở 120 ohm trên board là đủ.
+       Bộ chuyển USB-RS485 có điện trở đầu cuối riêng thì có thể giữ.
+     - Nếu không nhận được dữ liệu: thử đảo dây A/B (mỗi hãng ghi nhãn một
+       kiểu).
+
+  f) Mạch nạp
+     - ST-LINK/J-Link: nối SWDIO, SWCLK, GND, VTref với J3.
+     - Mạch nạp KHÔNG cấp nguồn cho board. Board phải được cấp nguồn riêng.
+
+4.3 Kiểm tra trước khi cấp nguồn
+--------------------------------
+  [ ] Đo jack/CN4 bằng đồng hồ: đúng 24 V, đúng cực tính.
+  [ ] Không có dây nào chạm giữa +5V và GND trên U16.
+  [ ] Motor nối qua Relay 3 (COM3/OUT3), dương và âm cùng một nguồn; không
+      nối motor vào chân GPIO nào.
+  [ ] Dây CN1-3 (+24V) không nối vào bộ chuyển USB-RS485.
+  [ ] Cáp Ethernet đã cắm, đèn Link trên RJ45 sáng sau khi cấp nguồn.
+
+
+================================================================================
+5. MÔI TRƯỜNG PHẦN MỀM (MÁY ẢO)
+================================================================================
+
+Môi trường build (Zephyr, module, SDK, Python, công cụ) đã được cài sẵn trong
+máy ảo. Người mới KHÔNG cần chạy lại setup.sh. Cách dựng máy ảo từ đầu nằm
+ở Phụ lục A.
+
+5.1 Thông tin máy ảo
+--------------------
+  - Phần mềm ảo hóa             : [CẦN BỔ SUNG] (VirtualBox / VMware / ...)
+  - File máy ảo / nơi tải       : [CẦN BỔ SUNG]
+  - Tài khoản đăng nhập         : [CẦN BỔ SUNG]
+  - Thư mục workspace           : [CẦN BỔ SUNG], trong tài liệu gọi là $WS,
+                                  ví dụ ~/fw_showcase-workspace
+  - Vị trí khóa ký MCUboot      : [CẦN BỔ SUNG] (xem mục 6)
+
+  Cấu trúc thư mục workspace:
+
+    $WS/
+    +-- .venv/                 Python virtualenv (có west, imgtool, ...)
+    +-- .west/                 cấu hình west (manifest = fptUniversity)
+    +-- fptUniversity/         repo git
+    |   +-- fw_showcase/       <== project này
+    +-- zephyr/                Zephyr v4.4.2
+    +-- bootloader/mcuboot/    MCUboot
+    +-- modules/               hal_stm32, mbedtls, segger, ...
+    ~/zephyr-sdk-1.0.1/        Zephyr SDK (toolchain arm-zephyr-eabi)
+
+5.2 Cấu hình máy ảo cần thiết
+-----------------------------
+  - USB pass-through: phải chuyển ST-LINK/J-Link (và bộ chuyển USB-RS485,
+    USB-UART) từ máy thật vào máy ảo. VirtualBox: Devices > USB > chọn thiết
+    bị. Nên tạo "USB filter" để tự động gắn.
+  - Mạng: đặt card mạng máy ảo ở chế độ "Bridged" (cầu nối) để máy ảo cùng
+    mạng LAN với board. Ở chế độ NAT, máy ảo thường không mở được web của
+    board và board không kết nối được broker MQTT chạy trong máy ảo.
+  - Quyền USB: người dùng trong máy ảo phải đọc/ghi được ST-LINK (udev rules
+    của STM32CubeProgrammer, xem Phụ lục A).
+
+5.3 Kiểm tra nhanh môi trường
+-----------------------------
+  $ cd $WS
+  $ ls                                      # thấy: fptUniversity zephyr ...
+  $ .venv/bin/west --version                # in ra phiên bản west
+  $ cat .west/config                        # manifest path = fptUniversity
+  $ ls ~/zephyr-sdk-1.0.1                    # SDK đã có
+  $ which STM32_Programmer_CLI              # phải in ra đường dẫn
+  $ lsusb | grep -i -E "st-link|stlink|segger"   # thấy mạch nạp (đã cắm)
+
+  Nếu lệnh nào lỗi, xem mục 14.
+
+5.4 Cập nhật code/driver từ GitHub
+----------------------------------
+  Repo GitHub dùng để cập nhật code, môi trường và driver vào máy ảo:
+  $ cd $WS/fptUniversity && git pull
+  Nếu west.yml thay đổi (đổi phiên bản Zephyr/module), chạy lại:
+  $ $WS/fptUniversity/fw_showcase/scripts/setup.sh
+  setup.sh chạy lại an toàn, bước nào đã làm sẽ bỏ qua.
+
+
+================================================================================
+6. KHÓA KÝ MCUboot
+================================================================================
+
+6.1 Vì sao cần khóa
+-------------------
+  MCUboot chỉ khởi động firmware được ký bằng khóa RSA-2048 khớp với khóa
+  công khai nhúng trong chính MCUboot. Khóa bí mật KHÔNG được lưu trong repo
+  (.gitignore chặn *.pem, *.key). Script build đọc đường dẫn khóa từ biến môi
+  trường STM32H573_MCUBOOT_KEY_FILE.
+
+6.2 Chọn khóa
+-------------
+  Cách 1 - Dùng khóa chung của project (khuyến nghị cho lớp học/nhóm):
+    Lấy file khóa từ: [CẦN BỔ SUNG]
+    $ export STM32H573_MCUBOOT_KEY_FILE=~/keys/fw_showcase-rsa2048.pem
+
+  Cách 2 - Tự tạo khóa (chỉ cho board của riêng bạn):
+    $ cd $WS
+    $ mkdir -p ~/keys
+    $ .venv/bin/python bootloader/mcuboot/scripts/imgtool.py keygen \
+          -t rsa-2048 -k ~/keys/fw_showcase-rsa2048.pem
+    $ chmod 600 ~/keys/fw_showcase-rsa2048.pem
+    $ export STM32H573_MCUBOOT_KEY_FILE=~/keys/fw_showcase-rsa2048.pem
+
+  Ghi biến vào ~/.bashrc để mọi terminal đều có:
+    $ echo 'export STM32H573_MCUBOOT_KEY_FILE=~/keys/fw_showcase-rsa2048.pem' >> ~/.bashrc
+    $ source ~/.bashrc
+
+  LƯU Ý:
+    - Board đã nạp MCUboot với khóa A sẽ KHÔNG khởi động firmware ký bằng
+      khóa B. Đổi khóa thì phải nạp lại MCUboot (flash.sh nạp cả MCUboot nên
+      tự giải quyết việc này).
+    - Không commit, không gửi khóa qua chat/email công khai. Sao lưu khóa.
+    - Mất khóa: các board ngoài hiện trường không cập nhật được ứng dụng nếu
+      không nạp lại MCUboot qua SWD.
+
+
+================================================================================
+7. BUILD FIRMWARE
+================================================================================
+
+7.1 Build bằng script (khuyến nghị)
+-----------------------------------
+  $ cd $WS
+  $ ./fptUniversity/fw_showcase/scripts/build.sh
+    -> thư mục build: fptUniversity/fw_showcase/build
+
+  Hoặc chọn thư mục build khác:
+  $ ./fptUniversity/fw_showcase/scripts/build.sh /tmp/out
+
+  Script tự dùng $WS/.venv, không cần activate. Mỗi lần build đều build lại
+  từ đầu (pristine, -p always), mất khoảng 3-5 phút.
+
+  Build thành công khi thấy dòng cuối:
+    === DONE fw_showcase build: .../fw_showcase/build ===
+
+7.2 File đầu ra
+---------------
+  File                                            Nội dung
+  ----------------------------------------------  -----------------------------
+  build/mcuboot/zephyr/zephyr.hex                 Bootloader MCUboot
+  build/fw_showcase/zephyr/zephyr.signed.hex      Ứng dụng đã ký (nạp SWD)
+  build/fw_showcase/zephyr/zephyr.signed.bin      Ứng dụng đã ký (dạng nhị phân)
+
+7.3 Lệnh tương đương chạy tay (để hiểu script làm gì)
+-----------------------------------------------------
+  $ cd $WS && source .venv/bin/activate
+  $ west build -p always -d fptUniversity/fw_showcase/build \
+        -b stm32h573ri_custom --sysbuild fptUniversity/fw_showcase \
+        -- -DBOARD_ROOT=$WS/fptUniversity/fw_showcase \
+           -DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$STM32H573_MCUBOOT_KEY_FILE\"
+
+  Giải thích:
+    -b stm32h573ri_custom   tên board (định nghĩa trong fw_showcase/boards)
+    --sysbuild              build MCUboot + ứng dụng trong một lần
+    -DBOARD_ROOT=...        chỉ cho Zephyr thư mục chứa định nghĩa board
+    SB_CONFIG_BOOT_SIGNATURE_KEY_FILE   khóa để ký ứng dụng và nhúng vào MCUboot
+
+7.4 Mở menu cấu hình Kconfig (khi cần)
+--------------------------------------
+  $ source $WS/.venv/bin/activate
+  $ west build -d $WS/fptUniversity/fw_showcase/build -t menuconfig
+  Thay đổi qua menuconfig chỉ tồn tại trong thư mục build. Muốn giữ lâu dài,
+  sửa prj.conf.
+
+
+================================================================================
+8. NẠP FIRMWARE
+================================================================================
+
+8.1 Chuẩn bị
+------------
+  - Cấp nguồn cho board (24 V).
+  - Cắm ST-LINK vào máy, gắn vào máy ảo, nối với J3.
+  - Kiểm tra: $ STM32_Programmer_CLI -c port=SWD
+    Kết quả in ra thông tin chip (Device name: STM32H573/...) là kết nối tốt.
+
+8.2 Build + nạp bằng một lệnh (ST-LINK)
+---------------------------------------
+  $ cd $WS
+  $ ./fptUniversity/fw_showcase/scripts/flash.sh
+  Script build lại, sau đó nạp cả MCUboot và ứng dụng đã ký. Thành công khi
+  thấy: === DONE fw_showcase flash ===
+
+8.3 Nạp bản build có sẵn bằng west
+----------------------------------
+  $ cd $WS && source .venv/bin/activate
+  $ west flash -d fptUniversity/fw_showcase/build              # ST-LINK
+  $ west flash -d fptUniversity/fw_showcase/build -r jlink     # J-Link
+
+8.4 Chỉ cập nhật ứng dụng
+-------------------------
+  - Cách 1: nạp build/fw_showcase/zephyr/zephyr.signed.hex vào slot image-0
+    (file .hex đã chứa địa chỉ đúng 0x08020000).
+  - Cách 2 (thử cập nhật kiểu MCUboot): nạp ảnh đã ký vào slot image-1
+    (0x080F0000), sau đó dùng thao tác "NRST swap":
+      1. Reset board, LED LIFE nháy nhanh trong 3 giây.
+      2. Trong 3 giây đó, bấm SW1 (Reset) một lần.
+      3. Board khởi động lại và MCUboot đổi sang ảnh ở slot image-1.
+    Ảnh mới tự xác nhận (confirm) khi chạy được.
+
+8.5 Sau khi nạp
+---------------
+  - LED LIFE (PA8) nháy nhanh 3 giây (cửa sổ NRST swap), sau đó nháy đúp
+    đều (heartbeat).
+  - LCD hiện màn hình khởi động ("fw_showcase 3.1.0" / "DHT11 + ALARM" /
+    "NET WAIT") đúng 5 giây, sau đó hiện màn hình trạng thái. Dòng IP hiện
+    IP tĩnh đã lưu cho tới khi Ethernet có link và được cấp địa chỉ, rồi đổi
+    ngay sang IP thật (DHCP chờ tối đa 30 giây kể từ lúc có link).
+
+
+================================================================================
+9. XEM LOG (CONSOLE)
+================================================================================
+
+Có 2 nguồn log khác nhau:
+
+  Thành phần     Kênh                         Cách đọc
+  -------------  ---------------------------  -----------------------------
+  Ứng dụng       SEGGER RTT kênh 0 (qua SWD)  J-Link RTT Viewer hoặc OpenOCD
+  MCUboot        UART5, 115200 8N1            USB-UART 3.3 V nối U16-19/20
+
+9.1 Log ứng dụng qua J-Link
+---------------------------
+  $ JLinkRTTViewer
+    (chọn Device STM32H573RI, giao tiếp SWD, tốc độ 4000 kHz)
+  Hoặc ghi ra file:
+  $ JLinkRTTLogger -Device STM32H573RI -If SWD -Speed 4000 -RTTChannel 0 log.txt
+
+9.2 Log ứng dụng qua ST-LINK + OpenOCD
+--------------------------------------
+  Chạy OpenOCD với cấu hình cho STM32H5 (ví dụ interface/stlink.cfg và
+  target/stm32h5x.cfg), sau đó trong telnet 4444:
+    rtt setup 0x20000000 0x40000 "SEGGER RTT"
+    rtt start
+    rtt server start 19021 0
+  Rồi đọc log:
+  $ nc localhost 19021      (hoặc telnet localhost 19021)
+  [CẦN KIỂM TRA] tên file cấu hình target của OpenOCD đã cài trong máy ảo.
+
+9.3 Log của MCUboot qua UART5
+-----------------------------
+  $ picocom -b 115200 /dev/ttyUSB0
+  Nối RX của bộ USB-UART vào U16-19 (PB13) và GND vào U16-17.
+
+9.4 Log mẫu khi khởi động bình thường
+-------------------------------------
+  == fw_showcase v3.1.0 ==
+  [CFG] slot A invalid - trying backup slot B     (lần đầu, flash trống)
+  [CFG] No saved config - loading defaults
+  [CFG] IP mode=DHCP
+  | NRST 3s |
+  [NET] MAC = 00:08:DC:01:02:03
+  [NET] DHCP mode - waiting for link...
+  [NET] link up - requesting lease...
+  [NET] IP = 192.168.1.50  (dhcp)
+  [APP] Running - http://192.168.1.50/
+  | T=28C | H=45% | IP=192.168.1.50 | OK | MOTOR:OFF   |
+
+  Đọc lỗi thường gặp:
+  | DHT11 read error -5 | ...   -> xem mục 14 (DHT11)
+  [NET] DHCP got no lease       -> không có DHCP, dùng IP tĩnh 192.168.1.100
+  [MQTT] connection lost ...    -> broker mất kết nối, tự nối lại sau 3 giây
+  [MQTT] link down              -> rút cáp mạng, phiên MQTT bị ngắt ngay
+  MQTT status "not configured"  -> chưa nhập Broker Host (mục 10, bước 4)
+
+
+================================================================================
+10. SỬ DỤNG LẦN ĐẦU
+================================================================================
+
+  1. Cắm Ethernet, cấp nguồn. Chờ LCD hiện dòng "IP:x.x.x.x". Trước khi có
+     link, dòng này là IP tĩnh đã lưu.
+     - Có DHCP: IP do router cấp.
+     - Không có DHCP sau 30 giây kể từ lúc có link: IP tĩnh mặc định 192.168.1.100/24, gateway
+       192.168.1.1. Khi đó máy tính phải đặt IP cùng dải 192.168.1.x.
+  2. Trên máy ảo, mở trình duyệt: http://<IP-board>/
+  3. Đăng nhập với mật khẩu mặc định: 123456
+     (Nhập sai, lần sau phải chờ lâu hơn, tối đa 3 giây. Chỉ 1 phiên đăng
+     nhập tại một thời điểm.)
+  4. Phần "MQTT Settings": điền Broker Host, Port, Client ID, User,
+     Password.
+     - Port 8883 = TLS (chứng chỉ broker phải do Let's Encrypt / ISRG Root X1
+       cấp). Port khác = TCP thường.
+     - Để thử nhanh: dùng Mosquitto trong LAN, port 1883.
+  5. Phần "Modify Web Login Password": ĐỔI mật khẩu.
+  6. Bấm "Save & Apply". Board lưu cấu hình vào flash và khởi động lại.
+
+  LƯU Ý:
+    - "Save & Apply" chỉ lưu MQTT và mật khẩu. Các nút công tắc motor, Send
+      RS485, Subscribe, Publish có tác dụng ngay, không khởi động lại.
+    - Hãy ghi lại mật khẩu mới. Quên mật khẩu thì phải xóa flash (mục 14).
+
+  Chuẩn bị Mosquitto trong máy ảo (thử nghiệm, KHÔNG dùng cho sản phẩm):
+  $ sudo apt install mosquitto mosquitto-clients
+  Tạo file /etc/mosquitto/conf.d/lan.conf với nội dung:
+      listener 1883
+      allow_anonymous true
+  $ sudo systemctl restart mosquitto
+  Broker Host trên web = IP của máy ảo (xem bằng: ip -4 addr).
+
+
+================================================================================
+11. KIỂM TRA TỪNG CHỨC NĂNG (CHECKLIST)
+================================================================================
+
+  [ ] 11.1 DHT11 và LCD
+        - LCD hiện: dòng 1 IP, dòng 2 "T: 28.0°C , H: 45.0%", dòng 3
+          "MQTT:OK   Motor:OFF". "MQTT:OK" chỉ hiện khi đã kết nối broker và
+          cáp mạng đang cắm; rút cáp thì đổi ngay sang "MQTT:N/A".
+        - Hà hơi vào DHT11: độ ẩm tăng trong vài lần đọc (mỗi 2 giây).
+
+  [ ] 11.2 Cảnh báo (ngưỡng trong src/modules/Alarm/alarm.h)
+        Điều kiện         Bắt đầu khi         Hết khi
+        ----------------  ------------------  ----------------------------
+        Nhiệt độ cao      > 40 °C             <= 39 °C
+        Nhiệt độ thấp     < 0 °C              >= 1 °C
+        Độ ẩm cao         > 90 %              <= 88 %
+        Độ ẩm thấp        < 20 %              >= 22 %
+        Lỗi cảm biến      3 lần đọc lỗi liên  lần đọc tốt đầu tiên
+                          tiếp
+        Cách thử dễ nhất: RÚT DÂY DATA của DHT11 -> sau khoảng 6 giây báo
+        "SENSOR". Hoặc dùng máy sấy cho > 40 °C (giữ khoảng cách, đừng làm
+        chảy nhựa).
+        Kết quả mong đợi khi cảnh báo bắt đầu:
+          - RS485 gửi "ALARM #n T=.. H=.. REASON=..." và lặp lại mỗi 10 giây.
+          - Relay 1 nháy 500 ms bật / 500 ms tắt (nghe tiếng tách, LED relay).
+          - Chỉ cảnh báo NHIỆT ĐỘ CAO mới bật motor. Cảnh báo độ ẩm, nhiệt độ
+            thấp và SENSOR (rút dây DATA) chỉ nháy Relay 1, motor không đổi.
+          - LCD dòng 4 hiện cảnh báo. Web và MQTT cập nhật ngay.
+        Khi hết cảnh báo: RS485 gửi "CLEAR #n ...", relay tắt, motor tắt (nếu
+        do cảnh báo nhiệt độ cao bật).
+
+  [ ] 11.3 Motor
+        - Bật/tắt bằng công tắc trên web -> web hiện "(by web)".
+        - Nhấn rồi thả nút PA10 -> đảo trạng thái lúc thả tay, "(by button)".
+          Giữ nút thì chưa đổi.
+        - Gửi "ON"/"OFF" qua RS485 -> "(by RS485)", board trả "ACK MOTOR ON".
+        - Quy tắc: motor do cảnh báo nhiệt độ cao bật thì tự tắt khi nhiệt độ
+          về bình thường. Motor bật/tắt bằng tay thì không bao giờ tự đổi.
+          Tắt bằng tay khi đang quá nhiệt thì giữ tắt đến lần quá nhiệt sau.
+
+  [ ] 11.4 RS485
+        $ picocom -b 9600 --omap crlf --echo /dev/ttyUSB0
+        Gõ ON rồi Enter -> nhận "ACK MOTOR ON". Gõ OFF -> "ACK MOTOR OFF".
+        Lệnh không phân biệt hoa/thường, tối đa 63 ký tự. Gõ chữ trong ô
+        RS485 trên web, bấm Send -> dòng đó xuất hiện trong picocom.
+        LƯU Ý: không gửi trong lúc board đang gửi (bán song công).
+
+  [ ] 11.5 MQTT
+        NNN = byte cuối của IP board, đủ 3 chữ số (192.168.1.50 -> 050).
+        $ mosquitto_sub -h <IP-broker> -t 'users/admin@example.com/050/#' -v
+        Mỗi 30 giây (và ngay khi có cảnh báo/đổi motor) nhận:
+        users/admin@example.com/050/status
+                   {"id":"Board 050","fw":"3.1.0","temp":28,"humi":45,
+                    "sensor_ok":1,"alarm":0,"reason":"NONE","motor":1,
+                    "motor_by":"RS485","ip":"192.168.1.50"}
+        Thử Publish trên web: topic "test/hello", nội dung "hello" -> board
+        gửi đúng topic "test/hello", không thêm tiền tố (tối đa 63 ký tự).
+        Thử Subscribe trên web: topic "abc/#", rồi:
+        $ mosquitto_pub -h <IP-broker> -t abc/x -m hi
+        -> web hiện tin nhắn (lưu tối đa 3 tin gần nhất).
+
+  [ ] 11.6 HTTP API (dùng curl)
+        $ curl http://<IP-board>/status                    # không cần login
+        $ curl -c ck.txt -d 'pw=123456' http://<IP-board>/login
+        $ curl -b ck.txt -d 'on=1' http://<IP-board>/api/motor
+        $ curl -b ck.txt -d 'text=HELLO' http://<IP-board>/api/rs485
+        $ curl -b ck.txt http://<IP-board>/api/live
+        Kết quả API dạng {"ok":1,"msg":"..."}.
+        LƯU Ý: đăng nhập bằng curl sẽ đá phiên đăng nhập trên trình duyệt (chỉ
+        1 phiên).
+
+  [ ] 11.7 Lưu cấu hình
+        Đổi cấu hình MQTT -> Save & Apply -> sau khi khởi động lại, cấu hình
+        vẫn còn. Log in "[CFG] loaded from slot A".
+
+
+================================================================================
+12. CẤU TRÚC MÃ NGUỒN VÀ CÁC CHỈNH SỬA THƯỜNG GẶP
+================================================================================
+
+12.1 Cấu trúc
+-------------
+  fw_showcase/
+  +-- west.yml                manifest west (Zephyr v4.4.2 + module cần thiết)
+  +-- CMakeLists.txt          danh sách file nguồn
+  +-- prj.conf                Kconfig của ứng dụng
+  +-- sysbuild.conf           chọn MCUboot, kiểu chữ ký
+  +-- sysbuild/mcuboot.conf   Kconfig của MCUboot
+  +-- boards/
+  |   +-- st/stm32h573ri_custom/        định nghĩa board (DTS, pinctrl)
+  |   +-- stm32h573ri_custom.overlay    thay đổi devicetree cho showcase
+  +-- scripts/                setup.sh, build.sh, flash.sh
+  +-- src/
+      +-- main.c              khởi động + vòng lặp chính (đọc 2 s/lần)
+      +-- modules/            mỗi module một thư mục
+          +-- Alarm/          ngưỡng cảnh báo, tin ALARM/CLEAR qua RS485
+          +-- Boot/           xác nhận ảnh MCUboot, NRST swap
+          +-- Config/         cấu hình, trạng thái dùng chung, phiên bản
+          +-- DHT11/          cảm biến DHT11
+          +-- LCD/            driver LCD PCF8574, bố cục màn hình
+          +-- Motor/          ngõ ra motor, nút PA10
+          +-- MQTT/           MQTT client, chứng chỉ CA, cấu hình mbedTLS (TLS/)
+          +-- Network/        Ethernet, DHCP / IP tĩnh
+          +-- RS485/          UART4 RS485, lệnh ON/OFF
+          +-- StatusLED/      LED LIFE
+          +-- WebServer/      web server, trang HTML, hàm HTTP
+
+  Các luồng (thread): web server, MQTT client, bộ xử lý lệnh RS485 (mỗi cái
+  một thread, khai báo bằng K_THREAD_DEFINE) và vòng lặp chính trong main.c.
+  Chỉ thread MQTT gọi thư viện MQTT. Web gửi yêu cầu Subscribe/Publish qua
+  hàng đợi.
+
+12.2 Chỉnh sửa thường gặp
+-------------------------
+  Muốn ...                          Sửa ở đâu
+  --------------------------------  -----------------------------------------
+  Đổi ngưỡng cảnh báo, độ trễ       src/modules/Alarm/alarm.h (ALARM_T_HIGH_C, ...)
+  Đổi chu kỳ đọc / gửi MQTT /       src/main.c (DHT_READ_PERIOD_MS,
+  lặp ALARM                         REPORT_PERIOD_MS, ALARM_REPEAT_PERIOD_MS)
+  Đổi chân thiết bị ngoài           boards/stm32h573ri_custom.overlay
+  Bật/tắt tính năng Zephyr          prj.conf
+  Đổi giá trị mặc định (mật khẩu,   src/modules/Config/app_config.c (config_defaults)
+  IP tĩnh, tên thiết bị)
+  Đổi CA cho MQTT TLS               src/modules/MQTT/mqtt_ca.h
+  Đổi giao diện web                 src/modules/WebServer/web_pages.h, web_server.c
+  Đổi nội dung LCD                  src/modules/LCD/lcd_view.c
+  Đổi phiên bản hiển thị            src/modules/Config/version.h (và CMakeLists.txt)
+
+  LƯU Ý khi sửa:
+    - Thêm file .c mới: phải thêm vào target_sources trong CMakeLists.txt.
+    - Sửa struct app_config_t (thêm/bớt/đổi kích thước trường): PHẢI tăng
+      CFG_VERSION trong app_config.h. Nếu không, cấu hình cũ trong flash bị
+      đọc sai. Khi tăng, board sẽ quay về cấu hình mặc định (kể cả mật khẩu
+      123456).
+    - DHT11 cần >= 1 giây giữa 2 lần đọc. Không đặt DHT_READ_PERIOD_MS < 1000.
+    - Sau khi sửa, build lại bằng build.sh và kiểm tra lại checklist mục 11.
+
+
+================================================================================
+13. CÁC LƯU Ý QUAN TRỌNG / RỦI RO ĐÃ BIẾT
+================================================================================
+
+  13.1 Địa chỉ MAC cố định trong code
+       MAC của W5500 đặt cứng trong devicetree:
+       local-mac-address = [00 08 DC 01 02 03]
+       (boards/st/stm32h573ri_custom/stm32h573ri_custom.dts)
+       -> MỌI board nạp cùng firmware có CÙNG MAC. Hai board trở lên trong
+          một mạng LAN sẽ xung đột (mất kết nối chập chờn, DHCP cấp trùng IP).
+       Cách xử lý tạm cho lớp học: mỗi board dùng một bản build có MAC khác,
+       sửa byte cuối trong file DTS (ví dụ 03 -> 04, 05, ...) trước khi build.
+       Ghi lại MAC đã dùng cho từng board.
+
+  13.2 Quên mật khẩu web
+       Không có cách khôi phục mật khẩu qua web/RS485. Phải xóa vùng cấu hình
+       trong flash (config-a và config-b) để quay về mặc định 123456. Cách
+       đơn giản nhất là xóa toàn bộ chip rồi nạp lại:
+       $ STM32_Programmer_CLI -c port=SWD -e all
+       $ ./fptUniversity/fw_showcase/scripts/flash.sh
+       (Mọi cấu hình MQTT cũng bị xóa.)
+
+  13.3 Phiên bản ảnh trong MCUboot đang là 0.0.0
+       CONFIG_MCUBOOT_DOWNGRADE_PREVENTION=y đã bật, nhưng Zephyr lấy phiên
+       bản ảnh (để ký) từ file "VERSION" trong thư mục ứng dụng. Project
+       CHƯA có file này, nên mọi ảnh được ký với phiên bản 0.0.0+0. Phiên
+       bản "3.1.0" trong version.h / CMakeLists.txt chỉ để hiển thị. Vì vậy
+       tính năng chống hạ cấp hiện chưa có tác dụng thực tế.
+       Muốn bật thật: tạo file fw_showcase/VERSION (định dạng Zephyr:
+       VERSION_MAJOR = 3, VERSION_MINOR = 1, PATCHLEVEL = 0, VERSION_TWEAK = 0,
+       EXTRAVERSION =) và tăng mỗi lần phát hành.
+
+  13.4 Bảo mật web
+       Web dùng HTTP (không mã hóa). Mật khẩu và cookie truyền dạng rõ trong
+       LAN. Mật khẩu mặc định 123456 phải đổi ngay. Không đưa board ra
+       Internet.
+
+  13.5 DNS cố định
+       DNS server đặt cứng 8.8.8.8 (prj.conf). Mạng chặn DNS ra ngoài thì
+       broker dạng tên miền không phân giải được. Dùng IP của broker, hoặc
+       sửa CONFIG_DNS_SERVER1.
+
+  13.6 MQTT TLS chỉ tin ISRG Root X1
+       Port 8883 chỉ kết nối được broker có chứng chỉ chuỗi về ISRG Root X1
+       (Let's Encrypt). Broker dùng CA riêng (ví dụ test.mosquitto.org:8883)
+       sẽ báo lỗi TLS. Đổi CA trong src/modules/MQTT/mqtt_ca.h.
+
+  13.7 Điện áp 5 V trên chân MCU
+       Xem mục 3.2: thiết bị cấp 5 V có điện trở kéo lên 5 V. [CẦN KIỂM TRA]
+       các chân dùng có chịu được 5 V không.
+
+  13.8 J3 không có NRST
+       Mạch nạp không reset cứng được board (board.cmake dùng
+       --reset-mode=hw). Xem mục 14 nếu nạp báo lỗi.
+
+  13.9 Nhãn relay trên schematic bị ngược
+       Xem mục 3.3 (CN3). Tin theo devicetree: Relay 1 = PB5.
+
+  13.10 Cấp nguồn
+       Chỉ cắm USB-C thì relay/RS485 không chạy. CN4 không có chống ngược cực.
+       Không cấp quá 28 V.
+
+
+================================================================================
+14. XỬ LÝ SỰ CỐ (FAQ)
+================================================================================
+
+  --- Build ---
+  Lỗi: [ERR] Signing key not found: <unset>
+    -> Chưa đặt STM32H573_MCUBOOT_KEY_FILE hoặc file không đọc được. Xem
+       mục 6. Kiểm tra: echo $STM32H573_MCUBOOT_KEY_FILE; ls -l <file>
+
+  Lỗi: [ERR] west not found
+    -> Thiếu $WS/.venv. Chạy scripts/setup.sh (Phụ lục A).
+
+  Lỗi CMake "Could not find ... board stm32h573ri_custom"
+    -> Build tay mà thiếu -DBOARD_ROOT. Dùng build.sh.
+
+  Lỗi "fatal: not a git repository" khi chạy script
+    -> Script dùng git để tìm workspace. Thư mục fptUniversity phải là một
+       bản git clone (có thư mục .git).
+
+  --- Nạp ---
+  Lỗi: [ERR] STM32_Programmer_CLI not found
+    -> Cài STM32CubeProgrammer, thêm thư mục bin/ vào PATH (Phụ lục A).
+
+  Lỗi "No ST-LINK detected" / "Unable to get core ID"
+    -> Kiểm tra: ST-LINK đã gắn vào máy ảo (lsusb), board có nguồn, dây
+       SWDIO/SWCLK/GND/VTref đúng, udev rules đã cài.
+    -> J3 không có NRST: thử giữ SW1 (Reset), chạy lệnh nạp, thả SW1 khi
+       thấy "Connecting". Hoặc sửa boards/st/stm32h573ri_custom/board.cmake
+       thành "--reset-mode=sw". [CẦN KIỂM TRA] cách nào ổn định trên board
+       thật.
+
+  --- Khởi động ---
+  LED LIFE không nháy, không có log ứng dụng
+    -> MCUboot không chấp nhận ảnh: sai khóa (mục 6), hoặc chỉ nạp ứng dụng
+       mà chưa có MCUboot. Chạy flash.sh để nạp cả hai. Xem log MCUboot ở
+       UART5 (mục 9.3).
+
+  Board khởi động lại liên tục
+    -> Xem log RTT để biết lỗi (stack overflow, hard fault). Nếu vừa sửa
+       code, kiểm tra kích thước stack thread.
+
+  --- Thiết bị ngoài ---
+  LCD sáng nhưng không có chữ
+    -> Vặn biến trở độ tương phản trên module PCF8574.
+  LCD không sáng, không có chữ
+    -> Kiểm tra 5 V, GND, SDA/SCL có bị đảo không (SDA = U16-9, SCL = U16-10).
+
+  DHT11 luôn báo lỗi (DHT11 read error)
+    -> Thiếu điện trở kéo lên, sai chân DATA (phải là U16-5), cảm biến hỏng,
+       dây quá dài. Sau 3 lần lỗi liên tiếp sẽ báo cảnh báo SENSOR (đây là
+       hành vi đúng).
+
+  Motor không chạy
+    -> Có 24 V chưa? Bật motor trên web: Relay 3 phải kêu "tách", LED relay
+       sáng. Relay đóng mà motor không quay -> COM3 chưa có nguồn (tiếp điểm
+       khô), hoặc Motor (-) không về đúng GND của nguồn đó.
+  Web/LCD treo hoặc board reset khi motor chạy
+    -> Sụt nguồn/nhiễu từ motor: dùng nguồn 5 V riêng cho motor, thêm diode
+       và tụ 100 nF ở hai đầu motor, tách dây GND của motor và nút nhấn.
+
+  Nút PA10 không tác dụng
+    -> Nút phải nối giữa U16-12 và GND (không phải +5V).
+
+  RS485 không nhận/gửi
+    -> Đảo dây A/B, kiểm tra 9600 8N1, có nguồn 24 V (phía cách ly), R88 có
+       lắp. Lệnh phải kết thúc bằng Enter, hoặc ngừng gõ 50 ms.
+
+  Relay không đóng
+    -> Có cấp 24 V chưa (cuộn relay dùng +5V-ISO). Relay 1 chỉ nháy khi có
+       cảnh báo; Relay 3 đóng khi motor ON.
+
+  --- Mạng ---
+  LCD hiện IP 192.168.1.100 dù có router
+    -> DHCP không trả lời trong 30 giây kể từ lúc có link (trước khi có link
+       LCD luôn hiện IP tĩnh). Kiểm tra cáp, đèn Link trên RJ45,
+       router có bật DHCP.
+  Không mở được web
+    -> Máy ảo phải ở chế độ mạng Bridged, cùng dải IP với board. Thử:
+       ping <IP-board>.
+  Nhiều board cùng mạng bị chập chờn
+    -> Trùng MAC (mục 13.1).
+  MQTT luôn "not configured"
+    -> Chưa điền Broker Host, chưa Save & Apply.
+  MQTT không kết nối
+    -> Port 1883: kiểm tra broker có cho phép kết nối từ LAN (listener 1883,
+       allow_anonymous, tường lửa). Port 8883: xem mục 13.6. Tên miền
+       broker: xem mục 13.5.
+
+  --- Khác ---
+  Quên mật khẩu web -> mục 13.2.
+
+
+================================================================================
+15. PHỤ LỤC A: CÀI MÔI TRƯỜNG TỪ ĐẦU (DÀNH CHO NGƯỜI DỰNG MÁY ẢO)
+================================================================================
+
+  Hệ điều hành đã thử: Ubuntu (khuyến nghị bản LTS 64-bit). Cần Internet và
+  khoảng [CẦN BỔ SUNG] GB dung lượng trống.
+
+  A.1 Cài công cụ hệ thống
+  $ sudo apt update
+  $ sudo apt install git cmake ninja-build python3 python3-venv python3-pip \
+        wget xz-utils file device-tree-compiler picocom mosquitto-clients
+  (cmake phải >= 3.20: kiểm tra bằng cmake --version)
+
+  A.2 Lấy mã nguồn và chạy setup
+  $ mkdir ~/fw_showcase-workspace && cd ~/fw_showcase-workspace
+  $ git clone https://github.com/dmi-tech/fptUniversity.git
+  $ ./fptUniversity/fw_showcase/scripts/setup.sh
+  setup.sh làm 6 bước:
+    1. Kiểm tra công cụ (git, cmake >= 3.20, ninja, python3, venv).
+    2. Tạo $WS/.venv và cài west.
+    3. west init + west update: tải Zephyr v4.4.2 và các module trong
+       west.yml (cmsis, hal_stm32, mbedtls, mcuboot, segger, ...).
+    4. Cài thư viện Python của Zephyr và MCUboot.
+    5. Cài Zephyr SDK (theo zephyr/SDK_VERSION, hiện là 1.0.1), chỉ toolchain
+       arm-zephyr-eabi.
+    6. Cảnh báo nếu thiếu STM32_Programmer_CLI hoặc khóa ký.
+  LƯU Ý: phải clone vào một thư mục RỖNG. Zephyr và module được tải vào cạnh
+  thư mục clone. Script từ chối chạy nếu workspace là $HOME hoặc /.
+
+  A.3 STM32CubeProgrammer
+    - Tải từ https://www.st.com/en/development-tools/stm32cubeprog.html
+      (cần tài khoản ST).
+    - Cài đặt, rồi thêm vào ~/.bashrc:
+        export PATH="$PATH:<thư mục cài>/bin"
+    - Cài udev rules đi kèm (thư mục Drivers/rules trong bộ cài), ví dụ:
+        $ sudo cp <thư mục cài>/Drivers/rules/*.rules /etc/udev/rules.d/
+        $ sudo udevadm control --reload-rules && sudo udevadm trigger
+      [CẦN KIỂM TRA] đường dẫn thư mục rules theo phiên bản đã cài.
+
+  A.4 (Tùy chọn) J-Link Software Pack từ https://www.segger.com/downloads/jlink/
+      để có JLinkRTTViewer. OpenOCD: sudo apt install openocd (phiên bản phải
+      hỗ trợ STM32H5, [CẦN KIỂM TRA]).
+
+  A.5 Quyền cổng serial (USB-RS485, USB-UART):
+  $ sudo usermod -aG dialout $USER     (đăng xuất rồi đăng nhập lại)
+
+  A.6 Đặt khóa ký (mục 6), build thử (mục 7) để xác nhận môi trường.
+
+  A.7 Trước khi đóng gói máy ảo: xóa thư mục build, KHÔNG để khóa riêng của
+  bạn trong máy ảo nếu máy ảo sẽ chia sẻ cho nhiều người (trừ khi đó là khóa
+  dùng chung của lớp học).
+
+
+================================================================================
+16. PHỤ LỤC B: BẢNG LỆNH HAY DÙNG
+================================================================================
+
+  Việc                         Lệnh (chạy trong $WS)
+  ---------------------------  ------------------------------------------------
+  Build                        ./fptUniversity/fw_showcase/scripts/build.sh
+  Build + nạp (ST-LINK)        ./fptUniversity/fw_showcase/scripts/flash.sh
+  Nạp bản build có sẵn         source .venv/bin/activate &&
+                               west flash -d fptUniversity/fw_showcase/build
+  Nạp bằng J-Link              west flash -d fptUniversity/fw_showcase/build -r jlink
+  Kiểm tra kết nối ST-LINK     STM32_Programmer_CLI -c port=SWD
+  Xóa toàn bộ flash            STM32_Programmer_CLI -c port=SWD -e all
+  Menuconfig                   west build -d fptUniversity/fw_showcase/build -t menuconfig
+  Log RTT (J-Link)             JLinkRTTViewer
+  Terminal RS485               picocom -b 9600 --omap crlf --echo /dev/ttyUSB0
+  Theo dõi MQTT                mosquitto_sub -h <broker> -t 'users/admin@example.com/<NNN>/#' -v
+  Trạng thái board (JSON)      curl http://<IP-board>/status
+  Cập nhật code                cd fptUniversity && git pull
+
+
+================================================================================
+17. PHỤ LỤC C: BẢNG PHÂN VÙNG FLASH (2 MB, bắt đầu 0x08000000)
+================================================================================
+
+  Phân vùng      Offset     Địa chỉ       Kích thước  Nội dung
+  -------------  ---------  ------------  ----------  -------------------------
+  mcuboot        0x000000   0x08000000    128 KB      Bootloader MCUboot
+  image-0        0x020000   0x08020000    704 KB      Ứng dụng đang chạy
+  image-scratch  0x0D0000   0x080D0000    128 KB      Vùng tạm khi swap
+  image-1        0x0F0000   0x080F0000    704 KB      Ảnh cập nhật
+  config-a       0x1A0000   0x081A0000    32 KB       Cấu hình (bản chính)
+  config-b       0x1A8000   0x081A8000    32 KB       Cấu hình (bản dự phòng)
+  swapmark       0x1B0000   0x081B0000    8 KB        Cờ thao tác NRST swap
+
+
+================================================================================
+18. PHỤ LỤC D: THUẬT NGỮ
+================================================================================
+
+  Zephyr       Hệ điều hành thời gian thực (RTOS) mã nguồn mở.
+  west         Công cụ dòng lệnh của Zephyr: tải mã nguồn, build, nạp.
+  manifest     File west.yml, liệt kê phiên bản Zephyr và các module cần tải.
+  sysbuild     Cơ chế build nhiều ảnh (MCUboot + ứng dụng) trong một lệnh.
+  MCUboot      Bootloader an toàn: kiểm tra chữ ký, đổi ảnh (swap) khi cập
+               nhật.
+  slot         Vùng flash chứa một ảnh firmware (image-0, image-1).
+  imgtool      Công cụ của MCUboot để tạo khóa và ký ảnh.
+  devicetree   Mô tả phần cứng (chân, ngoại vi) cho Zephyr (.dts, .overlay).
+  overlay      File devicetree bổ sung/sửa cho một ứng dụng cụ thể.
+  Kconfig      Hệ thống bật/tắt tính năng của Zephyr (prj.conf).
+  SWD          Giao tiếp nạp/debug 2 dây của ARM (SWDIO, SWCLK).
+  RTT          Real Time Transfer của SEGGER: in log qua SWD, không cần UART.
+  RS485        Chuẩn truyền nối tiếp vi sai, đi xa, bán song công.
+  MQTT         Giao thức publish/subscribe nhẹ cho IoT.
+  TLS          Mã hóa kết nối (MQTT cổng 8883).
+  DHCP         Router tự cấp IP cho thiết bị.
+  Hysteresis   Độ trễ: ngưỡng bật và ngưỡng tắt khác nhau để tránh bật/tắt
+               liên tục quanh một giá trị.
+
+================================================================================
+                                 HẾT TÀI LIỆU
+================================================================================

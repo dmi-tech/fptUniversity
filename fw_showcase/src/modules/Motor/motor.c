@@ -1,4 +1,4 @@
-/* motor.c — motor output (PA2) shared by the web page, RS485, the PA10
+/* motor.c — motor output (Relay 3, PA15) shared by the web page, RS485, the PA10
  * button and the alarm (ownership rules in motor.h) */
 #include "motor.h"
 #include "mqtt_app.h"
@@ -6,7 +6,8 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/printk.h>
 
-#define BUTTON_DEBOUNCE_MS 50
+#define BUTTON_POLL_MS   10
+#define BUTTON_INTEG_MAX 5    /* x BUTTON_POLL_MS = 50 ms to change level */
 
 static const struct gpio_dt_spec s_motor  = GPIO_DT_SPEC_GET(DT_ALIAS(motor0), gpios);
 static const struct gpio_dt_spec s_button = GPIO_DT_SPEC_GET(DT_NODELABEL(user_btn), gpios);
@@ -16,7 +17,6 @@ static bool           s_on;
 static enum motor_src s_owner;      /* who started it, NONE while off */
 static enum motor_src s_last_src;   /* who changed it last */
 
-static struct gpio_callback    s_btn_cb;
 static struct k_work_delayable s_btn_work;
 
 /* Caller holds s_lock. Returns true when the output changed. */
@@ -76,18 +76,34 @@ const char *motor_src_str(enum motor_src src)
     }
 }
 
-/* ── Button PA10: debounced toggle ───────────────────────────── */
-static void btn_isr(const struct device *d, struct gpio_callback *cb, uint32_t pins)
-{
-    ARG_UNUSED(d); ARG_UNUSED(cb); ARG_UNUSED(pins);
-    /* Does nothing when the debounce work is already pending */
-    k_work_schedule(&s_btn_work, K_MSEC(BUTTON_DEBOUNCE_MS));
-}
+/* ── Button PA10: one click = press then release ─────────────── */
+/* Polled, not interrupt driven: a running brushed motor couples noise into
+ * PA10, and edge interrupts then fire continuously. Every BUTTON_POLL_MS one
+ * sample moves an integrator up (pressed) or down (released); the level only
+ * counts as changed once the integrator reaches an end, so short spikes are
+ * absorbed. A click is a stable press followed by a stable release. */
+static uint8_t s_btn_integ;   /* 0 = released .. BUTTON_INTEG_MAX = pressed */
+static bool    s_btn_down;    /* last stable level, true = pressed */
+static bool    s_btn_skip;    /* held since boot: its release is not a click */
 
 static void btn_work(struct k_work *w)
 {
     ARG_UNUSED(w);
-    if (gpio_pin_get_dt(&s_button) <= 0) return;   /* released: a bounce */
+    k_work_schedule(&s_btn_work, K_MSEC(BUTTON_POLL_MS));
+
+    if (gpio_pin_get_dt(&s_button) > 0) {
+        if (s_btn_integ < BUTTON_INTEG_MAX) s_btn_integ++;
+    } else if (s_btn_integ > 0) {
+        s_btn_integ--;
+    }
+
+    if (!s_btn_down && s_btn_integ == BUTTON_INTEG_MAX) {
+        s_btn_down = true;           /* pressed: wait for the release */
+        return;
+    }
+    if (!s_btn_down || s_btn_integ != 0) return;
+    s_btn_down = false;
+    if (s_btn_skip) { s_btn_skip = false; return; }
 
     k_mutex_lock(&s_lock, K_FOREVER);
     bool on = !s_on;
@@ -105,11 +121,13 @@ bool motor_init(void)
     gpio_pin_configure_dt(&s_motor, GPIO_OUTPUT_INACTIVE);
     gpio_pin_configure_dt(&s_button, GPIO_INPUT);
 
+    /* Held at boot: start as pressed and swallow that release */
+    s_btn_down  = (gpio_pin_get_dt(&s_button) > 0);
+    s_btn_skip  = s_btn_down;
+    s_btn_integ = s_btn_down ? BUTTON_INTEG_MAX : 0;
     k_work_init_delayable(&s_btn_work, btn_work);
-    gpio_init_callback(&s_btn_cb, btn_isr, BIT(s_button.pin));
-    gpio_add_callback(s_button.port, &s_btn_cb);
-    gpio_pin_interrupt_configure_dt(&s_button, GPIO_INT_EDGE_TO_ACTIVE);
+    k_work_schedule(&s_btn_work, K_MSEC(BUTTON_POLL_MS));
 
-    printk("[MOTOR] MOTOR PA2, BTN PA10 OK\n");
+    printk("[MOTOR] MOTOR RL3 PA15, BTN PA10 OK\n");
     return true;
 }

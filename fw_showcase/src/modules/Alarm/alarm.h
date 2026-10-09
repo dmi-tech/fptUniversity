@@ -31,7 +31,8 @@ enum alarm_event {
 bool alarm_init(void);
 
 /* Feed one DHT11 sample (ok=false when the read failed). Starts/stops the
- * 1 s relay blink and the alarm-driven motor (motor.h) on a state change. */
+ * 1 s relay blink on any alarm, and the alarm-driven motor (motor.h) only
+ * when the reason enters/leaves T_HIGH. */
 enum alarm_event alarm_update(bool ok, int temp_c, int humi_pct);
 
 bool              alarm_active(void);

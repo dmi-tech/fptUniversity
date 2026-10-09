@@ -7,7 +7,7 @@ riêng, có README, hướng dẫn build và giấy phép riêng.
 
 | Project | Mô tả | Nền tảng |
 | ------- | ----- | -------- |
-| [fw_showcase](fw_showcase) | Theo dõi nhiệt độ/độ ẩm bằng DHT11, hiển thị LCD 20x4, cấu hình qua web, gửi dữ liệu MQTT (hỗ trợ TLS), cảnh báo qua RS485/relay/motor, điều khiển motor từ web/RS485/nút nhấn. Khởi động an toàn bằng MCUboot. | STM32H573RI, Zephyr v4.4.2 |
+| [fw_showcase](fw_showcase) | Theo dõi nhiệt độ/độ ẩm bằng DHT11, hiển thị LCD 20x4, cấu hình qua web, gửi dữ liệu MQTT (hỗ trợ TLS), cảnh báo qua RS485/relay (quá nhiệt thì bật thêm motor), điều khiển motor qua Relay 3 từ web/RS485/nút nhấn. Khởi động an toàn bằng MCUboot. | STM32H573RI, Zephyr v4.4.2 |
 
 ## Bắt đầu
 
