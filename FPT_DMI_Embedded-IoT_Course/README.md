@@ -21,7 +21,7 @@ Mọi nội dung hướng dẫn bằng tiếng Việt. Log đọc qua **SEGGER R
 | Board Base Board STMH5 | Bắt buộc |
 | Mạch nạp ST-LINK (hoặc J-Link) nối J3 (SWD) | Nạp chương trình và đọc log |
 | Nguồn 24 V (jack DC1) | Chỉ khi dùng RS485 hoặc CAN nối bus thật |
-| Module và linh kiện theo bài lab | Xem bảng "Phần cứng" trong README từng driver |
+| Module và linh kiện cần dùng | Xem bảng "Phần cứng" trong README từng driver |
 | STM32CubeProgrammer (`STM32_Programmer_CLI` trong `PATH`) | Nạp bằng ST-LINK |
 
 Nếu chạy trong máy ảo: gắn thiết bị USB của mạch nạp vào máy ảo (không gắn đồng thời cho máy thật).
@@ -76,7 +76,7 @@ cd course-workspace/fptUniversity/FPT_DMI_Embedded-IoT_Course
 
 ---
 
-## 4. Cách làm một bài lab
+## 4. Cách dùng một driver
 
 Bạn chỉ sửa **4 file** ở thư mục gốc project:
 
@@ -88,7 +88,7 @@ Bạn chỉ sửa **4 file** ở thư mục gốc project:
 | `app.overlay` | Khai báo phần cứng (chân, alias) cho driver |
 
 Các bước: đọc README của driver → dán cấu hình → chép ví dụ `main.c` → `build.sh` →
-`flash.sh` → `rtt.sh` → làm bài lab trong `docs/labs.md`. **Không sửa** thư mục `driver/` và
+`flash.sh` → `rtt.sh` → viết chương trình của bạn. **Không sửa** thư mục `driver/` và
 `boards/` trong lúc làm bài. Hướng dẫn chung (cú pháp overlay, gộp nhiều driver, xung đột chân,
 lỗi thường gặp): [`driver/README.md`](driver/README.md).
 
@@ -106,7 +106,6 @@ lỗi thường gặp): [`driver/README.md`](driver/README.md).
 Phụ thuộc đi một chiều: `services → devices → (peripherals, protocols)`. README của mỗi driver
 luôn ghi rõ phải thêm những driver nào.
 
-Lộ trình học theo thứ tự, kèm phần cứng và sản phẩm nộp của từng bài: [`docs/labs.md`](docs/labs.md).
 Bảng chân và ràng buộc: [`docs/pinout.md`](docs/pinout.md).
 
 ---
@@ -120,7 +119,7 @@ FPT_DMI_Embedded-IoT_Course/
 ├── boards/            # Mô tả board stm32h573ri_custom (không sửa)
 ├── sysbuild/  sysbuild.conf   # MCUboot
 ├── scripts/           # setup, build, flash, rtt, setup_udev, mqtt_broker
-├── docs/              # pinout.md (bảng chân), labs.md (lộ trình bài lab)
+├── docs/              # pinout.md (bảng chân và ràng buộc)
 ├── tests/             # Kiểm tra build cho giảng viên (mục 7)
 ├── west.yml           # Manifest west (Zephyr v4.4.2 + module cần dùng)
 └── LICENSE            # Apache-2.0
@@ -135,7 +134,6 @@ Hai bộ kiểm tra **chỉ build, không nạp**; chạy sau khi sửa driver h
 ```bash
 ./tests/build_all/run.sh          # link toàn bộ driver trong nhiều cấu hình
 ./tests/readme_examples/run.sh    # build ví dụ main.c của từng README (ghép với overlay/Kconfig của README đó)
-./tests/lab_examples/run.sh       # build ví dụ của các lab trong docs/examples
 ```
 
 `build_all` gồm cấu hình đầy đủ và cấu hình "không có alias" (driver phải vẫn build và trả
