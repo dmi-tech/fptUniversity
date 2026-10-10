@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  # Nút "Run workflow" trên tab Actions (trigger thủ công)
+  workflow_dispatch:
+    inputs:
+      message:
+        description: "Ghi chú cho lần chạy (tùy chọn)"
+        required: false
+        default: "manual run"
+  # Tự chạy khi push lên dev
+  push:
+    branches:
+      - dev
+
+jobs:
+  build:
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Thông tin lần chạy
+        run: |
+          echo "Trigger  : ${{ github.event_name }}"
+          echo "Message  : ${{ github.event.inputs.message }}"
+          echo "Branch   : ${{ github.ref_name }}"
+          echo "Commit   : ${{ github.sha }}"
+          echo "Runner   : $(hostname) (${RUNNER_NAME:-n/a})"
+          echo "Workdir  : $(pwd)"
+          echo "Date     : $(date)"
+
+      - name: (chỗ đặt bước build thật của dự án)
+        run: |
+          echo "Thêm lệnh build/test của fptUniversity ở đây."
+          echo "VD Node: npm ci && npm test"
+          echo "VD Maven: mvn -B verify"
