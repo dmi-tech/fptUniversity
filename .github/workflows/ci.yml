@@ -1,29 +1,42 @@
 name: CI
 
-# Đặt tên run theo id web gửi lên (để web dễ đối chiếu khi poll)
-run-name: CI ${{ github.event.client_payload.id && format('#{0}', github.event.client_payload.id) || '' }}
+run-name: >-
+  CI ${{ github.event.client_payload.id
+    || inputs.request_id
+    || github.run_id }}
 
 on:
-  # Nút "Run workflow" trên tab Actions (trigger thủ công)
+  # Nút Run workflow trong GitHub Actions
   workflow_dispatch:
     inputs:
+      request_id:
+        description: ID để web đối chiếu lần build
+        required: false
+        type: string
       message:
-        description: "Ghi chú cho lần chạy (tùy chọn)"
+        description: Ghi chú cho lần chạy
         required: false
         default: "manual run"
+        type: string
+
   # Tự chạy khi push lên dev
   push:
     branches:
       - dev
-  # Trigger từ hệ thống bên ngoài qua REST API: POST /repos/OWNER/REPO/dispatches
+
+  # Trigger từ REST API repository_dispatch
   repository_dispatch:
     types:
       - run-ci
       - deploy
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: [self-hosted, Linux, X64]
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -40,33 +53,82 @@ jobs:
           echo "Workdir  : $(pwd)"
           echo "Date     : $(date)"
 
-      - name: (chỗ đặt bước build thật của dự án)
+      # Build firmware fw_showcase cho STM32H573.
+      # Cần cấu hình repository secret STM32H573_MCUBOOT_KEY
+      # chứa khóa riêng RSA-2048 dùng để ký MCUboot image.
+      - name: Prepare MCUboot signing key
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+        env:
+          MCU_BOOT_SIGNING_KEY: ${{ secrets.STM32H573_MCUBOOT_KEY }}
         run: |
-          echo "Thêm lệnh build/test của fptUniversity ở đây."
-          echo "VD Node: npm ci && npm test"
-          echo "VD Maven: mvn -B verify"
+          set -euo pipefail
+          test -n "$MCU_BOOT_SIGNING_KEY" || {
+            echo "Thiếu repository secret STM32H573_MCUBOOT_KEY" >&2
+            exit 1
+          }
 
-      # Chạy DÙ job thành công hay thất bại -> báo kết quả về website
+          key_file="$RUNNER_TEMP/stm32h573-mcuboot.pem"
+          printf '%s' "$MCU_BOOT_SIGNING_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          echo "STM32H573_MCUBOOT_KEY_FILE=$key_file" >> "$GITHUB_ENV"
+
+      - name: Cài Zephyr toolchain
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+        run: ./fw_showcase/scripts/setup.sh
+
+      - name: Build firmware
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+        run: ./fw_showcase/scripts/build.sh
+
+      - name: Upload firmware artifact
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-bin
+          path: fw_showcase/build/fw_showcase/zephyr/zephyr.signed.bin
+          if-no-files-found: error
+          retention-days: 7
+
+      # Callback tùy chọn, chạy cả khi build thành công hoặc thất bại.
       - name: Báo kết quả về website
-        if: always()
+        if: always() && secrets.CALLBACK_URL != ''
         env:
           CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+          CLIENT_PAYLOAD: ${{ toJSON(github.event.client_payload) }}
+          REQUEST_ID: ${{ inputs.request_id }}
+          JOB_STATUS: ${{ job.status }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
-          if [ -z "$CALLBACK_URL" ]; then
-            echo "Chưa cấu hình secret CALLBACK_URL -> bỏ qua bước callback."
-            exit 0
-          fi
-          curl -sS -X POST "$CALLBACK_URL" \
-            -H "Content-Type: application/json" \
-            -d @- <<EOF
-          {
-            "id": "${{ github.event.client_payload.id }}",
-            "status": "${{ job.status }}",
-            "event": "${{ github.event_name }}",
-            "run_id": "${{ github.run_id }}",
-            "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-            "commit": "${{ github.sha }}",
-            "branch": "${{ github.ref_name }}"
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          payload = json.loads(os.environ.get("CLIENT_PAYLOAD") or "{}")
+          body = {
+              "id": payload.get("id") or os.environ.get("REQUEST_ID") or "",
+              "status": os.environ["JOB_STATUS"],
+              "event": os.environ["EVENT_NAME"],
+              "run_id": os.environ["RUN_ID"],
+              "run_url": os.environ["RUN_URL"],
+              "commit": os.environ["COMMIT_SHA"],
+              "branch": os.environ["BRANCH_NAME"],
           }
-          EOF
-          echo "Đã gửi kết quả (status=${{ job.status }}) về website."
+
+          request = urllib.request.Request(
+              os.environ["CALLBACK_URL"],
+              data=json.dumps(body).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=15) as response:
+              print(f"Đã gửi kết quả callback: HTTP {response.status}")
+          PY
+
+      - name: Bỏ qua callback nếu chưa cấu hình
+        if: always() && secrets.CALLBACK_URL == ''
+        run: echo "Chưa cấu hình secret CALLBACK_URL; bỏ qua callback."
