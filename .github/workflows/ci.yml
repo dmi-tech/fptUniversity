@@ -12,6 +12,11 @@ on:
   push:
     branches:
       - dev
+  # Trigger từ hệ thống bên ngoài qua REST API: POST /repos/OWNER/REPO/dispatches
+  repository_dispatch:
+    types:
+      - run-ci
+      - deploy
 
 jobs:
   build:
@@ -24,6 +29,8 @@ jobs:
         run: |
           echo "Trigger  : ${{ github.event_name }}"
           echo "Message  : ${{ github.event.inputs.message }}"
+          echo "Action   : ${{ github.event.action }}"
+          echo "Payload  : ${{ toJSON(github.event.client_payload) }}"
           echo "Branch   : ${{ github.ref_name }}"
           echo "Commit   : ${{ github.sha }}"
           echo "Runner   : $(hostname) (${RUNNER_NAME:-n/a})"
