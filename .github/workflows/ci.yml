@@ -1,5 +1,8 @@
 name: CI
 
+# Đặt tên run theo id web gửi lên (để web dễ đối chiếu khi poll)
+run-name: CI ${{ github.event.client_payload.id && format('#{0}', github.event.client_payload.id) || '' }}
+
 on:
   # Nút "Run workflow" trên tab Actions (trigger thủ công)
   workflow_dispatch:
@@ -42,3 +45,28 @@ jobs:
           echo "Thêm lệnh build/test của fptUniversity ở đây."
           echo "VD Node: npm ci && npm test"
           echo "VD Maven: mvn -B verify"
+
+      # Chạy DÙ job thành công hay thất bại -> báo kết quả về website
+      - name: Báo kết quả về website
+        if: always()
+        env:
+          CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+        run: |
+          if [ -z "$CALLBACK_URL" ]; then
+            echo "Chưa cấu hình secret CALLBACK_URL -> bỏ qua bước callback."
+            exit 0
+          fi
+          curl -sS -X POST "$CALLBACK_URL" \
+            -H "Content-Type: application/json" \
+            -d @- <<EOF
+          {
+            "id": "${{ github.event.client_payload.id }}",
+            "status": "${{ job.status }}",
+            "event": "${{ github.event_name }}",
+            "run_id": "${{ github.run_id }}",
+            "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "commit": "${{ github.sha }}",
+            "branch": "${{ github.ref_name }}"
+          }
+          EOF
+          echo "Đã gửi kết quả (status=${{ job.status }}) về website."
