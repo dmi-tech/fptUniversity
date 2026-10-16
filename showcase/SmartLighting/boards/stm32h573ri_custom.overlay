@@ -1,0 +1,71 @@
+/*
+ * SmartLighting: BH1750 light sensor, 20x4 LCD, lamp on Relay 3 and 4 buttons
+ * on the Base Board.
+ *
+ *   U16-10 PB6   I2C1 SCL -> BH1750 (0x23) and PCF8574 backpack of the LCD
+ *   U16-9  PB9   I2C1 SDA -> BH1750 (0x23) and PCF8574 backpack of the LCD
+ *   U16-12 PA10  BTN1 lamp ON/OFF  (user_btn of the board)
+ *   U16-11 PA9   BTN2 AUTO/MANUAL  (SPI2 SCK on the board)
+ *   U16-3  PA3   BTN3 timer +1 h   (USART2 RX on the board)
+ *   U16-4  PA2   BTN4 timer -1 h   (USART2 TX on the board)
+ *   CN3-5/6      Relay 3 (PA15) switches the lamp, high = on
+ *
+ * Buttons close to GND (U16-17/18); the internal pull-ups are used.
+ * The board devicetree is left untouched; everything showcase specific is here.
+ */
+
+/ {
+	chosen {
+		/delete-property/ zephyr,canbus;
+	};
+
+	showcase_buttons {
+		compatible = "gpio-keys";
+		btn_mode: btn_mode {
+			gpios = <&gpioa 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "Mode";
+		};
+		btn_timer_up: btn_timer_up {
+			gpios = <&gpioa 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "Timer +1 h";
+		};
+		btn_timer_down: btn_timer_down {
+			gpios = <&gpioa 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "Timer -1 h";
+		};
+	};
+
+	/* Aliases of the course drivers (driver_gpio, driver_bh1750) */
+	aliases {
+		/* Lamp switched by Relay 3 (PA15, high = contact closed):
+		 * supply (+) -> CN3-5 COM3, CN3-6 OUT3 -> lamp -> supply (-) */
+		out0 = &relay_3;
+		out1 = &user_led;         /* LED LIFE (PA8), heartbeat */
+		in0 = &user_btn;          /* BTN1 lamp ON/OFF */
+		in1 = &btn_mode;          /* BTN2 AUTO/MANUAL */
+		in2 = &btn_timer_up;      /* BTN3 timer +1 h  */
+		in3 = &btn_timer_down;    /* BTN4 timer -1 h  */
+		light0 = &bh1750;
+	};
+};
+
+/* Peripherals not used by the showcase */
+&fdcan1 { status = "disabled"; };
+&sdmmc1 { status = "disabled"; };
+&usart1 { status = "disabled"; };
+&usart2 { status = "disabled"; };  /* PA2, PA3: buttons */
+&usart6 { status = "disabled"; };
+&uart4  { status = "disabled"; };  /* RS485 not used */
+&sht41  { status = "disabled"; };
+&i2c2   { status = "disabled"; };
+&spi2   { status = "disabled"; };  /* PA9: button */
+
+/* LCD backpack (PCF8574, 100 kHz only) and BH1750 share I2C1 */
+&i2c1 {
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+
+	bh1750: bh1750@23 {
+		compatible = "rohm,bh1750";
+		reg = <0x23>;
+	};
+};

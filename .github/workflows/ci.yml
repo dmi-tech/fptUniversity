@@ -53,7 +53,7 @@ jobs:
           echo "Workdir  : $(pwd)"
           echo "Date     : $(date)"
 
-      # Build firmware fw_showcase cho STM32H573.
+      # Build firmware các showcase (SmartEnvironment, SmartLighting) cho STM32H573.
       # Cần cấu hình repository secret STM32H573_MCUBOOT_KEY
       # chứa khóa riêng RSA-2048 dùng để ký MCUboot image.
       - name: Prepare MCUboot signing key
@@ -74,18 +74,25 @@ jobs:
 
       - name: Cài Zephyr toolchain
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
-        run: ./fw_showcase/scripts/setup.sh
+        # Hai showcase dùng chung workspace và cùng danh sách module
+        run: ./showcase/SmartEnvironment/scripts/setup.sh
 
-      - name: Build firmware
+      - name: Build SmartEnvironment
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
-        run: ./fw_showcase/scripts/build.sh
+        run: ./showcase/SmartEnvironment/scripts/build.sh
+
+      - name: Build SmartLighting
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+        run: ./showcase/SmartLighting/scripts/build.sh
 
       - name: Upload firmware artifact
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: firmware-bin
-          path: fw_showcase/build/fw_showcase/zephyr/zephyr.signed.bin
+          path: |
+            showcase/SmartEnvironment/build/SmartEnvironment/zephyr/zephyr.signed.bin
+            showcase/SmartLighting/build/SmartLighting/zephyr/zephyr.signed.bin
           if-no-files-found: error
           retention-days: 7
 

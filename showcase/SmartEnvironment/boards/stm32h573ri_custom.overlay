@@ -1,0 +1,105 @@
+/*
+ * SmartEnvironment: DHT11, 20x4 LCD, mini pump, spray servo and 4 buttons on
+ * the Base Board.
+ *
+ *   U16-5  PC2   DHT11 DATA        (SPI2 MISO on the board, SPI2 disabled below)
+ *   U16-10 PB6   I2C1 SCL -> PCF8574 backpack of the 20x4 LCD
+ *   U16-9  PB9   I2C1 SDA -> PCF8574 backpack of the 20x4 LCD
+ *   U16-16 PB14  servo signal      (TIM12_CH1, USART1 TX on the board, USART1 disabled)
+ *   U16-12 PA10  BTN1 pump ON/OFF  (user_btn of the board)
+ *   U16-11 PA9   BTN2 servo mode   (hold 3 s; SPI2 SCK on the board)
+ *   U16-3  PA3   BTN3 servo left   (hold; USART2 RX on the board)
+ *   U16-4  PA2   BTN4 servo right  (hold; USART2 TX on the board)
+ *   CN3-5/6      Relay 3 (PA15) switches the pump, high = on
+ *   Relay 1 (PB5) blinks while the environment is not OK
+ *
+ * Buttons close to GND (U16-17/18); the internal pull-ups are used.
+ * The board devicetree is left untouched; everything showcase specific is here.
+ */
+
+/ {
+	chosen {
+		/delete-property/ zephyr,canbus;
+	};
+
+	dht11: dht11 {
+		compatible = "aosong,dht";
+		/* Open drain: the line is only ever pulled low by the MCU; the
+		 * internal pull-up is weak, add an external 4.7k-10k if the module
+		 * has none. */
+		dio-gpios = <&gpioc 2 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
+	};
+
+	showcase_buttons {
+		compatible = "gpio-keys";
+		btn_mode: btn_mode {
+			gpios = <&gpioa 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "Servo mode";
+		};
+		btn_left: btn_left {
+			gpios = <&gpioa 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "Servo left";
+		};
+		btn_right: btn_right {
+			gpios = <&gpioa 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "Servo right";
+		};
+	};
+
+	servos {
+		compatible = "pwm-leds";
+		/* 50 Hz; the pulse width (500..2400 us) sets the angle */
+		spray_servo: spray_servo {
+			pwms = <&pwm12 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+			label = "Spray servo";
+		};
+	};
+
+	/* Aliases of the drivers (driver_gpio, driver_dht11, driver_servo) */
+	aliases {
+		/* Pump switched by Relay 3 (PA15, high = contact closed):
+		 * supply (+) -> CN3-5 COM3, CN3-6 OUT3 -> pump -> supply (-) */
+		out0 = &relay_3;
+		out1 = &relay_1;          /* alert relay, blinks with the level */
+		out2 = &user_led;         /* LED LIFE (PA8), heartbeat */
+		in0 = &user_btn;          /* BTN1 pump ON/OFF */
+		in1 = &btn_mode;          /* BTN2 servo mode (hold 3 s) */
+		in2 = &btn_left;          /* BTN3 servo left (hold) */
+		in3 = &btn_right;         /* BTN4 servo right (hold) */
+		dht0 = &dht11;
+		servo0 = &spray_servo;
+	};
+};
+
+/* Peripherals not used by the showcase */
+&fdcan1 { status = "disabled"; };
+&sdmmc1 { status = "disabled"; };
+&usart1 { status = "disabled"; };  /* PB14: servo */
+&usart2 { status = "disabled"; };  /* PA2, PA3: buttons */
+&usart6 { status = "disabled"; };
+&uart4  { status = "disabled"; };  /* RS485 not used */
+&sht41  { status = "disabled"; };  /* replaced by the DHT11 */
+&i2c2   { status = "disabled"; };
+&spi2   { status = "disabled"; };  /* PC2: DHT11, PA9: button */
+
+/* 20x4 LCD backpack: the PCF8574 is specified for 100 kHz only */
+&i2c1 {
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+};
+
+&pinctrl {
+	tim12_ch1_pb14: tim12_ch1_pb14 {
+		pinmux = <STM32_PINMUX('B', 14, AF2)>;
+	};
+};
+
+/* TIM12 for the servo: prescaler 100, the 20 ms period fits the 16-bit counter */
+&timers12 {
+	st,prescaler = <99>;
+	status = "okay";
+	pwm12: pwm {
+		pinctrl-0 = <&tim12_ch1_pb14>;
+		pinctrl-names = "default";
+		status = "okay";
+	};
+};

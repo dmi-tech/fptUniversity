@@ -1,0 +1,4 @@
+if BOARD_STM32H573RI_CUSTOM
+config BOARD
+	default "stm32h573ri_custom"
+endif

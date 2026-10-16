@@ -61,9 +61,9 @@ Chỉ liệt kê chức năng dùng được trên board này. Mọi chân đề
 | 3      | PA3        | ADC1_INP15 (biến trở)                   | `adc`                              | `usart2`                          |
 | 4      | PA2        | PWM TIM2_CH3 / motor                      | `pwm`, `motor`                   | `usart2`                          |
 | 5      | PC2        | SPI2_MISO / HC-SR04 ECHO                  | `spi` / `hcsr04`                 | –                                  |
-| 6      | PC1        | SPI2_MOSI                                 | `spi`                              | –                                  |
+| 6      | PC1        | SPI2_MOSI / LM393 AO (ADC kênh 11)        | `spi` / `lm393`                    | `spi2` (nếu dùng cho LM393)        |
 | 7      | PC0        | SPI2 CS / HC-SR04 TRIG                    | `spi` / `hcsr04`                 | `spi2` (nếu dùng cho HC-SR04)   |
-| 8      | PE0        | DHT11 DATA / LED ngoài                   | `dht11`, `gpio`                  | – (phải**bật** `gpioe`)  |
+| 8      | PE0        | DHT11 DATA / LED ngoài / LM393 DO        | `dht11`, `gpio`, `lm393`         | – (phải**bật** `gpioe`)  |
 | 9, 10  | PB9, PB6   | I2C1: LCD, BH1750, module I2C             | `i2c`, `lcd_pcf8574`, `bh1750` | –                                  |
 | 11     | PA9        | SPI2_SCK                                  | `spi`                              | –                                  |
 | 12     | PA10       | Nút nhấn (gpio) / nút encoder          | `gpio`, `encoder`                | –                                  |
@@ -76,11 +76,11 @@ Chỉ liệt kê chức năng dùng được trên board này. Mọi chân đề
 | Tài nguyên       | Dùng bởi                          | Không dùng đồng thời với                                                                        |
 | ------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | PA2, PA3           | motor / PWM (PA2), ADC (PA3)        | `usart2` (board bật sẵn → phải `status = "disabled"`)                                         |
-| PC0, PC1, PC2, PA9 | `spi`                             | `hcsr04` (PC0, PC2), ADC kênh 10/11/12                                                             |
+| PC0, PC1, PC2, PA9 | `spi`                             | `hcsr04` (PC0, PC2), `lm393` AO (PC1), ADC kênh 10/11/12                                                             |
 | PC6, PC7           | `uart` (USART6)                   | `encoder`                                                                                           |
 | PB14, PB15         | `servo`                           | `usart1` (phải tắt)                                                                               |
 | PA10               | `gpio` (nút), `encoder` (nút) | Không dùng hai driver cùng lúc trên PA10                                                         |
-| PE0                | `dht11`, `gpio` (LED ngoài)    | Đổi một trong hai sang chân khác                                                                 |
+| PE0                | `dht11`, `gpio` (LED ngoài), `lm393` (DO) | Chỉ một driver, đổi các driver còn lại sang chân khác                                                                 |
 | TIM2 / TIM12       | motor (TIM2), servo (TIM12)         | Mọi kênh của**một** timer chung tần số: đừng đặt servo (50 Hz) cùng timer với motor |
 | PB6, PB9           | I2C1                                | Dùng làm UART/GPIO cho việc khác                                                                  |
 
@@ -194,7 +194,7 @@ trong overlay (cột "Ngoại vi board phải tắt" ở mục 1.2); port chưa 
 
 **Ràng buộc ngắt (EXTI):** mỗi *số chân* chỉ có **một** đường ngắt chung cho mọi port (PA10,
 PB10, PC10 cùng dùng EXTI10). Hai chân cùng số không thể cùng bật ngắt. Driver dùng ngắt:
-`gpio` (ngõ vào), `hcsr04` (ECHO), `encoder` (A, B, nút), `ethernet` (INT PC4).
+`gpio` (ngõ vào), `hcsr04` (ECHO), `encoder` (A, B, nút), `lm393` (DO), `ethernet` (INT PC4).
 
 ### 4.3 Chân không được cấu hình lại
 
@@ -234,7 +234,7 @@ AF1, PC6/PC7 TIM3_CH1/CH2 AF2 hoặc TIM8_CH1/CH2 AF3, PA2/PA3 TIM15_CH1/CH2 AF4
 
 ---
 
-## 6. Tổ hợp không xung đột cho bài lab tổng hợp
+## 6. Tổ hợp không xung đột khi dùng nhiều driver
 
 | Bài                 | Driver                                                               | Chân U16 dùng                    |
 | -------------------- | -------------------------------------------------------------------- | ---------------------------------- |

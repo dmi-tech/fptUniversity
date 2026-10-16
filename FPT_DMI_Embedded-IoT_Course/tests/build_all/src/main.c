@@ -12,6 +12,7 @@
 #include "driver_hcsr04.h"
 #include "driver_i2c.h"
 #include "driver_lcd.h"
+#include "driver_lm393.h"
 #include "driver_motor.h"
 #include "driver_mqtt.h"
 #include "driver_pwm.h"
@@ -101,6 +102,17 @@ int main(void)
 	driver_adc_read_avg_mv(8, &value);
 	driver_adc_read_die_temp(&value);
 	driver_adc_read_vdda(&value);
+
+	/* lm393 */
+	uint8_t pct;
+
+	printk("lm393 %d\n", driver_lm393_init(0, on_input));
+	driver_lm393_set_hold(0, 200);
+	printk("lm393 do=%d\n", driver_lm393_get(0));
+	driver_lm393_read_raw(0, &raw);
+	driver_lm393_read_mv(0, &value);
+	driver_lm393_read_avg_mv(0, 8, &value);
+	driver_lm393_read_percent(0, &pct);
 
 	/* pwm */
 	printk("pwm %d\n", driver_pwm_init(0));

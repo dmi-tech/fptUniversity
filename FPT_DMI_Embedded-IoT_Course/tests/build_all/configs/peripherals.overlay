@@ -1,4 +1,4 @@
-/* gpio + timer + watchdog + adc + pwm, taken from the driver READMEs. */
+/* gpio + timer + watchdog + adc + pwm + lm393, taken from the driver READMEs. */
 / {
 	ec_outputs {
 		compatible = "gpio-leds";
@@ -15,8 +15,11 @@
 		};
 	};
 
+	/* adc reads the first channel, lm393 finds its channel by name */
 	zephyr,user {
-		io-channels = <&adc1 15>;
+		io-channels = <&adc1 15>, <&adc1 11>;
+		io-channel-names = "adc", "lm393_0";
+		lm393-gpios = <&gpioc 0 GPIO_ACTIVE_LOW>;
 	};
 
 	aliases {
@@ -43,6 +46,8 @@
 
 /* PA2 (TIM2_CH3) and PA3 (ADC1_INP15) are USART2 in the board DTS */
 &usart2 { status = "disabled"; };
+/* PC0 (lm393 DO) and PC1 (ADC1_INP11, lm393 AO) are SPI2 in the board DTS */
+&spi2 { status = "disabled"; };
 
 &pinctrl {
 	tim2_ch3_pa2: tim2_ch3_pa2 {
@@ -50,6 +55,9 @@
 	};
 	adc1_inp15_pa3: adc1_inp15_pa3 {
 		pinmux = <STM32_PINMUX('A', 3, ANALOG)>;
+	};
+	adc1_inp11_pc1: adc1_inp11_pc1 {
+		pinmux = <STM32_PINMUX('C', 1, ANALOG)>;
 	};
 };
 
@@ -67,7 +75,7 @@
 	clocks = <&rcc STM32_CLOCK(AHB2, 10)>,
 		 <&rcc STM32_SRC_HCLK ADCDAC_SEL(0)>;
 	clock-names = "adcx", "adc_ker";
-	pinctrl-0 = <&adc1_inp15_pa3>;
+	pinctrl-0 = <&adc1_inp15_pa3 &adc1_inp11_pc1>;
 	pinctrl-names = "default";
 	st,adc-clock-source = "ASYNC";
 	st,adc-prescaler = <6>;
@@ -77,6 +85,14 @@
 
 	channel@f {
 		reg = <15>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+
+	channel@b {
+		reg = <11>;
 		zephyr,gain = "ADC_GAIN_1";
 		zephyr,reference = "ADC_REF_INTERNAL";
 		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;

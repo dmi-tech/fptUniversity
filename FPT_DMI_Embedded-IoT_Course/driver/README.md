@@ -40,6 +40,7 @@ Ví dụ: `devices/lcd_pcf8574` dùng `protocols/i2c`, nên khi thêm LCD vào p
 | HC-SR04 | `devices/hcsr04` | – | Module HC-SR04 + 2 điện trở | ★★ |
 | BH1750 | `devices/bh1750` | – | Module GY-30/GY-302 | ★★ |
 | Encoder | `devices/encoder` | – | Module KY-040 | ★★ |
+| LM393 | `devices/lm393` | – | Module cảm biến LM393 (ánh sáng, âm thanh, độ ẩm đất, hồng ngoại...) | ★ |
 | LCD I2C | `devices/lcd_pcf8574` | `i2c` | LCD 16x2/20x4 + module PCF8574 | ★★ |
 | Motor DC | `devices/motor` | `pwm` (chế độ PWM) | Motor + module MOSFET | ★★ |
 | Servo | `devices/servo` | `pwm` | Servo SG90 + nguồn 5 V riêng | ★★ |
@@ -189,9 +190,9 @@ README của driver).
 | 3 | PA3 | ADC (biến trở) | `usart2` |
 | 4 | PA2 | PWM chung / motor | `usart2` |
 | 5 | PC2 | SPI2 MISO / HC-SR04 ECHO | – (SPI2 MISO chưa khai báo trong board) |
-| 6 | PC1 | SPI2 MOSI | – |
+| 6 | PC1 | SPI2 MOSI / LM393 AO | `spi2` (nếu dùng cho LM393) |
 | 7 | PC0 | SPI2 CS / HC-SR04 TRIG | `spi2` (nếu dùng cho HC-SR04) |
-| 8 | PE0 | DHT11 / LED ngoài (gpio) | – (phải **bật** `gpioe`) |
+| 8 | PE0 | DHT11 / LED ngoài (gpio) / LM393 DO | – (phải **bật** `gpioe`) |
 | 9, 10 | PB9, PB6 | I2C1: LCD, BH1750 | – (dùng chung bus được, khác địa chỉ) |
 | 11 | PA9 | SPI2 SCK | – |
 | 12 | PA10 | Nút nhấn (gpio) / nút encoder | – |
@@ -201,7 +202,7 @@ README của driver).
 
 **Ràng buộc ngắt (EXTI):** STM32 chỉ có **một** đường ngắt cho mỗi số chân, dùng chung cho mọi
 port (PA10, PB10, PC10 cùng dùng EXTI10). Các driver dùng ngắt: `gpio` (ngõ vào), `hcsr04` (ECHO),
-`encoder` (A, B, nút), `ethernet` (PC4). Hai chân **cùng số** không thể cùng bật ngắt, ví dụ không
+`encoder` (A, B, nút), `lm393` (DO), `ethernet` (PC4). Hai chân **cùng số** không thể cùng bật ngắt, ví dụ không
 dùng PA6 làm ECHO khi encoder đang ở PC6.
 
 ---
@@ -261,7 +262,7 @@ Bảng mã lỗi đầy đủ: `zephyr/lib/libc/minimal/include/errno.h` (giá t
 2. `timer` → làm việc định kỳ không dùng `k_msleep`.
 3. `watchdog` → tự khởi động lại khi treo.
 4. `adc`, `pwm` → analog và xung.
-5. `sht41`, `rtc`, `dht11`, `hcsr04`, `bh1750`, `encoder` → cảm biến.
+5. `sht41`, `rtc`, `dht11`, `hcsr04`, `bh1750`, `encoder`, `lm393` → cảm biến.
 6. `i2c` + `lcd_pcf8574`, `motor`, `servo` → ghép module.
 7. `uart`, `spi`, `rs485`, `can` → truyền thông.
 8. `ethernet`, `mqtt` → mạng và IoT.

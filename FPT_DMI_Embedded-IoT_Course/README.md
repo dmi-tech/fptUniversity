@@ -21,7 +21,7 @@ Mọi nội dung hướng dẫn bằng tiếng Việt. Log đọc qua **SEGGER R
 | Board Base Board STMH5 | Bắt buộc |
 | Mạch nạp ST-LINK (hoặc J-Link) nối J3 (SWD) | Nạp chương trình và đọc log |
 | Nguồn 24 V (jack DC1) | Chỉ khi dùng RS485 hoặc CAN nối bus thật |
-| Module và linh kiện cần dùng | Xem bảng "Phần cứng" trong README từng driver |
+| Module và linh kiện | Xem bảng "Phần cứng" trong README từng driver |
 | STM32CubeProgrammer (`STM32_Programmer_CLI` trong `PATH`) | Nạp bằng ST-LINK |
 
 Nếu chạy trong máy ảo: gắn thiết bị USB của mạch nạp vào máy ảo (không gắn đồng thời cho máy thật).
@@ -76,7 +76,7 @@ cd course-workspace/fptUniversity/FPT_DMI_Embedded-IoT_Course
 
 ---
 
-## 4. Cách dùng một driver
+## 4. Cách dùng driver
 
 Bạn chỉ sửa **4 file** ở thư mục gốc project:
 
@@ -88,8 +88,8 @@ Bạn chỉ sửa **4 file** ở thư mục gốc project:
 | `app.overlay` | Khai báo phần cứng (chân, alias) cho driver |
 
 Các bước: đọc README của driver → dán cấu hình → chép ví dụ `main.c` → `build.sh` →
-`flash.sh` → `rtt.sh` → viết chương trình của bạn. **Không sửa** thư mục `driver/` và
-`boards/` trong lúc làm bài. Hướng dẫn chung (cú pháp overlay, gộp nhiều driver, xung đột chân,
+`flash.sh` → `rtt.sh`. **Không sửa** thư mục `driver/` và
+`boards/` trong lúc làm việc. Hướng dẫn chung (cú pháp overlay, gộp nhiều driver, xung đột chân,
 lỗi thường gặp): [`driver/README.md`](driver/README.md).
 
 ---
@@ -100,7 +100,7 @@ lỗi thường gặp): [`driver/README.md`](driver/README.md).
 | --- | --- |
 | Ngoại vi trong chip | [`gpio`](driver/peripherals/gpio/README.md), [`timer`](driver/peripherals/timer/README.md), [`watchdog`](driver/peripherals/watchdog/README.md), [`adc`](driver/peripherals/adc/README.md), [`pwm`](driver/peripherals/pwm/README.md) |
 | Giao thức | [`i2c`](driver/protocols/i2c/README.md), [`spi`](driver/protocols/spi/README.md), [`uart`](driver/protocols/uart/README.md), [`rs485`](driver/protocols/rs485/README.md), [`can`](driver/protocols/can/README.md) |
-| Thiết bị | [`sht41`](driver/devices/sht41/README.md), [`rtc`](driver/devices/rtc/README.md), [`dht11`](driver/devices/dht11/README.md), [`bh1750`](driver/devices/bh1750/README.md), [`hcsr04`](driver/devices/hcsr04/README.md), [`encoder`](driver/devices/encoder/README.md), [`lcd_pcf8574`](driver/devices/lcd_pcf8574/README.md), [`motor`](driver/devices/motor/README.md), [`servo`](driver/devices/servo/README.md), [`ethernet`](driver/devices/ethernet/README.md) |
+| Thiết bị | [`sht41`](driver/devices/sht41/README.md), [`rtc`](driver/devices/rtc/README.md), [`dht11`](driver/devices/dht11/README.md), [`bh1750`](driver/devices/bh1750/README.md), [`hcsr04`](driver/devices/hcsr04/README.md), [`encoder`](driver/devices/encoder/README.md), [`lm393`](driver/devices/lm393/README.md), [`lcd_pcf8574`](driver/devices/lcd_pcf8574/README.md), [`motor`](driver/devices/motor/README.md), [`servo`](driver/devices/servo/README.md), [`ethernet`](driver/devices/ethernet/README.md) |
 | Dịch vụ | [`mqtt`](driver/services/mqtt/README.md) (broker mosquitto: `scripts/mqtt_broker.sh`) |
 
 Phụ thuộc đi một chiều: `services → devices → (peripherals, protocols)`. README của mỗi driver
@@ -119,7 +119,7 @@ FPT_DMI_Embedded-IoT_Course/
 ├── boards/            # Mô tả board stm32h573ri_custom (không sửa)
 ├── sysbuild/  sysbuild.conf   # MCUboot
 ├── scripts/           # setup, build, flash, rtt, setup_udev, mqtt_broker
-├── docs/              # pinout.md (bảng chân và ràng buộc)
+├── docs/              # pinout.md (bảng chân), test_report.md
 ├── tests/             # Kiểm tra build cho giảng viên (mục 7)
 ├── west.yml           # Manifest west (Zephyr v4.4.2 + module cần dùng)
 └── LICENSE            # Apache-2.0
@@ -129,7 +129,7 @@ FPT_DMI_Embedded-IoT_Course/
 
 ## 7. Dành cho giảng viên: kiểm tra build
 
-Hai bộ kiểm tra **chỉ build, không nạp**; chạy sau khi sửa driver hoặc README:
+Các bộ kiểm tra **chỉ build, không nạp**; chạy sau khi sửa driver hoặc README:
 
 ```bash
 ./tests/build_all/run.sh          # link toàn bộ driver trong nhiều cấu hình

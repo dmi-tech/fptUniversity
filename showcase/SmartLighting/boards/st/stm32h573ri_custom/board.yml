@@ -1,0 +1,6 @@
+board:
+  name: stm32h573ri_custom
+  full_name: Custom STM32H573RIV6 (E-Desk)
+  vendor: st
+  socs:
+    - name: stm32h573xx

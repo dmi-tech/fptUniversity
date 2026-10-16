@@ -17,7 +17,7 @@ static driver_encoder_cb_t step_cb;
 static driver_encoder_btn_cb_t btn_cb;
 static bool btn_pressed;
 
-static int32_t clamp(int32_t v)
+static int32_t clamp_pos(int32_t v)
 {
 	return CLAMP(v, limit_min, limit_max);
 }
@@ -25,7 +25,7 @@ static int32_t clamp(int32_t v)
 void driver_encoder_set_position(int32_t pos)
 {
 	K_SPINLOCK(&lock) {
-		position = clamp(pos);
+		position = clamp_pos(pos);
 	}
 }
 
@@ -37,7 +37,7 @@ void driver_encoder_set_limits(int32_t min, int32_t max)
 	K_SPINLOCK(&lock) {
 		limit_min = min;
 		limit_max = max;
-		position = clamp(position);
+		position = clamp_pos(position);
 	}
 }
 
@@ -89,7 +89,7 @@ static void input_event(struct input_event *evt, void *user_data)
 		int8_t step = evt->value > 0 ? 1 : -1;
 
 		K_SPINLOCK(&lock) {
-			position = clamp(position + evt->value);
+			position = clamp_pos(position + evt->value);
 			pos = position;
 		}
 		if (step_cb != NULL) {
