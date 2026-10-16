@@ -79,6 +79,28 @@ export STM32H573_MCUBOOT_KEY_FILE=~/keys/showcase-rsa2048.pem
 Sau khi nạp: LED LIFE nháy nhanh 3 giây rồi nháy đúp đều; LCD hiện màn hình
 khởi động 5 giây rồi tới màn hình trạng thái.
 
+**Trên Windows** (VS Code + extension IDE for Zephyr):
+
+1. Cài [VS Code](https://code.visualstudio.com/), extension **IDE for Zephyr**
+   (`mylonics.zephyr-ide`), Git và STM32CubeProgrammer. Trong trang Overview của
+   extension chọn **Host Tools → Install Host Tools**, rồi mở lại VS Code.
+2. Mở PowerShell, dùng thư mục ngắn (ví dụ `C:\zws`):
+
+   ```powershell
+   git config --global core.longpaths true
+   mkdir C:\zws; cd C:\zws
+   git clone --filter=blob:none --sparse https://github.com/dmi-tech/fptUniversity.git
+   git -C fptUniversity sparse-checkout set showcase/SmartLighting
+   powershell -ExecutionPolicy Bypass -File fptUniversity\showcase\SmartLighting\scripts\setup.ps1 -KeyFile C:\keys\showcase-rsa2048.pem
+   ```
+
+   Thiếu công cụ nào, script in lệnh `winget` để cài. Chưa có khóa thì bỏ
+   `-KeyFile`: firmware sẽ được ký bằng `C:\keys\showcase-rsa2048.pem`. Tạo
+   khóa đó (trong `C:\zws`): `mkdir C:\keys; .venv\Scripts\python bootloader\mcuboot\scripts\imgtool.py keygen -t rsa-2048 -k C:\keys\showcase-rsa2048.pem`.
+3. VS Code: **File → Open Folder** `C:\zws`, rồi `Ctrl+Shift+P` →
+   **Zephyr IDE: Setup Workspace from Current Directory** → **Use .west folder**.
+4. Chọn project `SmartLighting`, build `build`, bấm **Build** hoặc **Flash**.
+
 **Xem log:** log ứng dụng qua SEGGER RTT (J-Link RTT Viewer), log MCUboot qua
 UART5 (U16-19 / U16-20, 115200).
 

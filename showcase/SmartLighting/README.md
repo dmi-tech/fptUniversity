@@ -64,6 +64,10 @@ and use git (not a zip download), the scripts need it. `scripts/build.sh`
 only builds. No signing key is stored in the repository;
 see the guideline to get or create one.
 
+On Windows, use VS Code with the **IDE for Zephyr** extension:
+`scripts/setup.ps1` prepares the workspace and the extension's project (steps
+in the guideline, section 4).
+
 ## First use
 
 1. Plug in Ethernet and power the board; the LCD shows the IP address.
