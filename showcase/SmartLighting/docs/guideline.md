@@ -91,12 +91,12 @@ khởi động 5 giây rồi tới màn hình trạng thái.
    mkdir C:\zws; cd C:\zws
    git clone --filter=blob:none --sparse https://github.com/dmi-tech/fptUniversity.git
    git -C fptUniversity sparse-checkout set showcase/SmartLighting
-   powershell -ExecutionPolicy Bypass -File fptUniversity\showcase\SmartLighting\scripts\setup.ps1 -KeyFile C:\keys\showcase-rsa2048.pem
+   powershell -ExecutionPolicy Bypass -File fptUniversity\showcase\SmartLighting\scripts\setup.ps1
    ```
 
-   Thiếu công cụ nào, script in lệnh `winget` để cài. Chưa có khóa thì bỏ
-   `-KeyFile`: firmware sẽ được ký bằng `C:\keys\showcase-rsa2048.pem`. Tạo
-   khóa đó (trong `C:\zws`): `mkdir C:\keys; .venv\Scripts\python bootloader\mcuboot\scripts\imgtool.py keygen -t rsa-2048 -k C:\keys\showcase-rsa2048.pem`.
+   Thiếu công cụ nào, script in lệnh `winget` để cài. Firmware được ký bằng
+   khóa dev công khai của MCUboot (chỉ dùng cho lab). Dùng khóa riêng: thêm
+   `-KeyFile <khóa.pem>` vào lệnh trên.
 3. VS Code: **File → Open Folder** `C:\zws`, rồi `Ctrl+Shift+P` →
    **Zephyr IDE: Setup Workspace from Current Directory** → **Use .west folder**.
 4. Chọn project `SmartLighting`, build `build`, bấm **Build** hoặc **Flash**.

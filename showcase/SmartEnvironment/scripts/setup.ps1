@@ -18,7 +18,8 @@
 #   powershell -ExecutionPolicy Bypass -File <project>\scripts\setup.ps1 [-KeyFile <key.pem>]
 #
 # -KeyFile (or STM32H573_MCUBOOT_KEY_FILE): RSA-2048 private key that signs the
-# firmware. Stored in <workspace>\.vscode\<project>-signing.conf; run again
+# firmware. When none is given, the PUBLIC MCUboot development key is used (lab
+# use only). Stored in <workspace>\.vscode\<project>-signing.conf; run again
 # with another key to change it, or edit that file.
 param([string]$KeyFile = $env:STM32H573_MCUBOOT_KEY_FILE)
 
@@ -26,7 +27,7 @@ $ErrorActionPreference = 'Stop'
 
 # $true: without a key, sign with the public MCUboot development key (lab use
 # only). $false: a key must be given before building.
-$DevKeyFallback = $false
+$DevKeyFallback = $true
 
 function Step($msg) { Write-Host ""; Write-Host "=== $msg ===" }
 function Die($msg) { Write-Host "[ERR] $msg" -ForegroundColor Red; exit 1 }
