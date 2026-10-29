@@ -11,3 +11,29 @@
  *  - Một nhãn (label) chỉ được khai báo MỘT lần.
  *  - Hai driver không được dùng chung một chân (driver/README.md mục 3.3).
  */
+
+/{
+	input {
+		compatible = "gpio-keys";
+		button: button_1 {
+			gpios = <&gpioa 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "Button PA10";
+		};
+	};
+
+	output {
+		compatible = "gpio-leds";
+		relay: relay_1{
+			gpios = <&gpiob 5 GPIO_ACTIVE_HIGH>;
+			label = "Relay 1 - PB5";
+		};
+	};
+
+	aliases{
+		in0 = &button;
+		out0 = &relay;
+	};
+};
+
+&gpioa { status = "okay"; };
+&gpiob { status = "okay"; };
