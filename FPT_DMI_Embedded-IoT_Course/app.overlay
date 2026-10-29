@@ -11,3 +11,26 @@
  *  - Một nhãn (label) chỉ được khai báo MỘT lần.
  *  - Hai driver không được dùng chung một chân (driver/README.md mục 3.3).
  */
+
+/ {
+	dht11: dht11 {
+		compatible = "aosong,dht";
+		dio-gpios = <&gpioe 0 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
+	};
+
+	output {
+		compatible = "gpio-leds";
+		relay: relay_1 {
+			gpios = <&gpiob 5 GPIO_ACTIVE_HIGH>;
+			label = "Relay 1 - PB5";
+		};
+	};
+
+	aliases {
+		dht0 = &dht11;
+		out0 = &relay;
+	};
+};
+
+&gpiob { status = "okay"; };
+&gpioe { status = "okay"; };
