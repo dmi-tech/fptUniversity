@@ -11,3 +11,24 @@
  *  - Một nhãn (label) chỉ được khai báo MỘT lần.
  *  - Hai driver không được dùng chung một chân (driver/README.md mục 3.3).
  */
+
+/ {
+	zephyr,user {
+		/* Chân DE/RE của RS485: PC3 khi board lắp R88 (lắp R87 thì bỏ dòng này) */
+		rs485-de-gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
+	};
+
+	output {
+		compatible = "gpio-leds";
+		relay: relay_1 {
+			gpios = <&gpiob 5 GPIO_ACTIVE_HIGH>;
+			label = "Relay 1 - PB5";
+		};
+	};
+
+	aliases {
+		out0 = &relay;
+	};
+};
+
+&gpiob { status = "okay"; };
