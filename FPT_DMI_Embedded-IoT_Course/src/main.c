@@ -19,29 +19,18 @@ static struct driver_lcd lcd;
 
 int main(void)
 {
-	uint8_t cols, rows;
-	int count = 0;
-
 	printk("Lab 4: DHT11 -> LCD %d\n", LCD_TYPE);
 	if (driver_lcd_init(&lcd, &lcd_cfg)) {
 		printk("LCD initialization error\n");
 		return 0;
 	}
-	driver_lcd_get_size(&lcd, &cols, &rows);
 
 	if (driver_dht11_init(DHT)) {
 		printk("DHT11 initialization error\n");
 		driver_lcd_print_at(&lcd, 0, 0, "DHT11 init error");
 		return 0;
 	}
-
-	/* LCD 20x4: dòng 0 là tiêu đề, số đo ở dòng 1-2. LCD 16x2: số đo ở dòng 0-1 */
-	uint8_t row = (rows >= 4) ? 1 : 0;
-
-	if (rows >= 4) {
-		driver_lcd_print_at(&lcd, 0, 0, "DHT11 Monitor");
-	}
-	driver_lcd_print_at(&lcd, 0, row, "Reading...");
+	driver_lcd_print_at(&lcd, 0, 0, "Reading...");
 
 	while (1) {
 		int temp, hum;
@@ -49,24 +38,17 @@ int main(void)
 		k_msleep(2000);   /* DHT11 chỉ đọc được mỗi 2 giây */
 		if (driver_dht11_read(DHT, &temp, &hum)) {
 			printk("DHT11 read error\n");
-			driver_lcd_clear_row(&lcd, row);
-			driver_lcd_print_at(&lcd, 0, row, "DHT11 read error");
+			driver_lcd_clear(&lcd);
+			driver_lcd_print_at(&lcd, 0, 0, "DHT11 read error");
 			continue;
 		}
-		count++;
 		printk("DHT11: %d C, %d %%\n", temp, hum);
 
-		driver_lcd_clear_row(&lcd, row);
-		driver_lcd_set_cursor(&lcd, 0, row);
+		driver_lcd_clear(&lcd);
+		driver_lcd_set_cursor(&lcd, 0, 0);
 		driver_lcd_printf(&lcd, "Temp: %d C", temp);
-		driver_lcd_clear_row(&lcd, row + 1);
-		driver_lcd_set_cursor(&lcd, 0, row + 1);
+		driver_lcd_set_cursor(&lcd, 0, 1);
 		driver_lcd_printf(&lcd, "Humi: %d %%", hum);
-		if (rows >= 4) {
-			driver_lcd_clear_row(&lcd, 3);
-			driver_lcd_set_cursor(&lcd, 0, 3);
-			driver_lcd_printf(&lcd, "Reads: %d", count);
-		}
 	}
 	return 0;
 }
