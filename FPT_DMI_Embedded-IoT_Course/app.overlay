@@ -11,3 +11,21 @@
  *  - Một nhãn (label) chỉ được khai báo MỘT lần.
  *  - Hai driver không được dùng chung một chân (driver/README.md mục 3.3).
  */
+
+/ {
+	dht11: dht11 {
+		compatible = "aosong,dht";
+		dio-gpios = <&gpioe 0 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
+	};
+
+	aliases {
+		dht0 = &dht11;
+	};
+};
+
+&gpioe { status = "okay"; };
+
+/* LCD PCF8574 trên I2C1 (PB6 SCL, PB9 SDA): PCF8574 chạy tối đa 100 kHz */
+&i2c1 {
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+};
