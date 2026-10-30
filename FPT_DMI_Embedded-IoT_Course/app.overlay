@@ -11,3 +11,50 @@
  *  - Một nhãn (label) chỉ được khai báo MỘT lần.
  *  - Hai driver không được dùng chung một chân (driver/README.md mục 3.3).
  */
+
+/ {
+	zephyr,user {
+		/* DO của module: PE0 - U16-8, DO = 0 khi phát hiện */
+		lm393-gpios = <&gpioe 0 GPIO_ACTIVE_LOW>;
+		/* AO của module: PC1 - U16-6, ADC1 kênh 11 */
+		io-channels = <&adc1 11>;
+		io-channel-names = "lm393_0";
+	};
+};
+
+&gpioe { status = "okay"; };
+
+/* PC1 là SPI2 MOSI trong board DTS -> tắt SPI2 để dùng làm ADC */
+&spi2 { status = "disabled"; };
+
+&pinctrl {
+	adc1_inp11_pc1: adc1_inp11_pc1 {
+		pinmux = <STM32_PINMUX('C', 1, ANALOG)>;
+	};
+};
+
+&adc1 {
+	clocks = <&rcc STM32_CLOCK(AHB2, 10)>,
+		 <&rcc STM32_SRC_HCLK ADCDAC_SEL(0)>;
+	clock-names = "adcx", "adc_ker";
+	pinctrl-0 = <&adc1_inp11_pc1>;
+	pinctrl-names = "default";
+	st,adc-clock-source = "ASYNC";
+	st,adc-prescaler = <6>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	channel@b {
+		reg = <11>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+};
+
+/* LCD PCF8574 trên I2C1 (PB6 SCL, PB9 SDA): PCF8574 chạy tối đa 100 kHz */
+&i2c1 {
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+};
