@@ -11,23 +11,34 @@
  *              Example: URL "mqtt://broker.abc.com:1883" -> "broker.abc.com"
  * BROKER_PORT: TCP port of the broker, usually 1883.
  *              The driver has no TLS, so port 8883 does not work.
- * CLIENT_ID  : name of this board on the broker, at most 31 characters.
- *              Every board needs its own name (the broker drops a client
- *              when another one connects with the same name).
+ * DEVICE_NAME: name of this board, used as the MQTT client id and in the
+ *              topics. At most 31 characters. Every board needs its own name
+ *              (the broker drops a client when another one connects with
+ *              the same name).
  * MQTT_USER  : user name. Leave "" if the broker allows anonymous clients.
  * MQTT_PASS  : password. Leave "" if not needed. Sent in clear text (no TLS).
- * TOPIC_PUB  : topic the board publishes to.
- * TOPIC_SUB  : topic the board subscribes to.
+ * TOPIC_PREFIX: the server only accepts topics that start with this prefix.
+ * TOPIC_PUB  : topic the board publishes to  (TOPIC_PREFIX/DEVICE_NAME/data).
+ * TOPIC_SUB  : topic the board subscribes to (TOPIC_PREFIX/DEVICE_NAME/cmd).
  *              '+' matches one level, '#' matches all remaining levels.
+ *              A topic may be at most 63 characters (checked at build time).
  * =================================================================
  */
 #define BROKER_HOST  "broker.abc.com"
 #define BROKER_PORT  1883
-#define CLIENT_ID    "board-SE123456"
+#define DEVICE_NAME  "fptSE123456"
 #define MQTT_USER    ""
 #define MQTT_PASS    ""
-#define TOPIC_PUB    "fpt/SE123456/data"
-#define TOPIC_SUB    "fpt/SE123456/cmd"
+#define TOPIC_PREFIX "users/admin@example.com"
+
+#define CLIENT_ID    DEVICE_NAME
+#define TOPIC_PUB    TOPIC_PREFIX "/" DEVICE_NAME "/data"
+#define TOPIC_SUB    TOPIC_PREFIX "/" DEVICE_NAME "/cmd"
+
+/* Stop the build if a name is too long for the MQTT driver */
+BUILD_ASSERT(sizeof(CLIENT_ID) - 1 <= DRIVER_MQTT_MAX_CLIENT_ID, "DEVICE_NAME is too long");
+BUILD_ASSERT(sizeof(TOPIC_PUB) - 1 <= DRIVER_MQTT_MAX_TOPIC, "TOPIC_PUB is too long");
+BUILD_ASSERT(sizeof(TOPIC_SUB) - 1 <= DRIVER_MQTT_MAX_TOPIC, "TOPIC_SUB is too long");
 
 #define PUB_PERIOD_MS 5000
 
@@ -86,7 +97,7 @@ int main(void)
 
 	/* 3. Broker address, user name and password */
 	if (driver_mqtt_init(broker_ip, BROKER_PORT, CLIENT_ID) < 0) {
-		printk("Invalid BROKER_PORT / CLIENT_ID\n");
+		printk("Invalid BROKER_PORT / DEVICE_NAME\n");
 		return 0;
 	}
 	if (MQTT_USER[0] != '\0') {
