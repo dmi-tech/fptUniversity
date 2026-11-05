@@ -28,15 +28,20 @@ void web_app_info_cells(void);
 /* Sections between "MQTT Settings" and the password section */
 void web_app_sections(void);
 /* Script of the page. Must define appPoll(d), called with the /api/live JSON
- * every 2 s; d.app is the MQTT status JSON of the showcase
- * (mqtt_app_build_status()), null before the first reading. The script may
+ * every 2 s; d.app is the web status JSON of the showcase
+ * (web_app_build_status()), null before the first reading. The script may
  * use E(id), api(url, data, feedback_id) and fb(id, j). */
 const char *web_app_js(void);
 /* POST /api/<...> after login. Returns false when the path is not one of the
  * showcase's routes (the core then answers 404). */
 bool web_app_api_post(int fd, const char *path, const char *body);
 
-/* GET /status (no login) and "app" of /api/live: the MQTT status JSON, from
- * mqtt_app_build_status() of the showcase. */
+/* "app" of /api/live: status JSON for the page, with every value the page
+ * shows (may hold more than the MQTT status). Returns its length, or 0 when
+ * there is nothing to show yet. */
+int web_app_build_status(char *buf, size_t len);
+
+/* GET /status (no login): the MQTT status JSON, from mqtt_app_build_status()
+ * of the showcase. */
 
 #endif /* WEB_CORE_H */

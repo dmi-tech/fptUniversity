@@ -8,6 +8,10 @@
 bool        mqtt_app_is_connected(void);
 const char *mqtt_app_status(void);
 
+/* Drop the session (if any) and connect again at once with the broker
+ * settings now in g_cfg (web: Connect) */
+void        mqtt_app_reconnect(void);
+
 /* Ask the MQTT thread to publish the status JSON now (30 s period) */
 void        mqtt_app_publish_now(void);
 

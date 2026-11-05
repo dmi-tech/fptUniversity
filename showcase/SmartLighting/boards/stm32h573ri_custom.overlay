@@ -1,14 +1,14 @@
 /*
- * SmartLighting: BH1750 light sensor, 20x4 LCD, lamp on Relay 3 and 4 buttons
+ * SmartLighting: BH1750 light sensor, 20x4 LCD, lamp on Relay 1 and 4 buttons
  * on the Base Board.
  *
  *   U16-10 PB6   I2C1 SCL -> BH1750 (0x23) and PCF8574 backpack of the LCD
  *   U16-9  PB9   I2C1 SDA -> BH1750 (0x23) and PCF8574 backpack of the LCD
  *   U16-12 PA10  BTN1 lamp ON/OFF  (user_btn of the board)
  *   U16-11 PA9   BTN2 AUTO/MANUAL  (SPI2 SCK on the board)
- *   U16-3  PA3   BTN3 timer +1 h   (USART2 RX on the board)
- *   U16-4  PA2   BTN4 timer -1 h   (USART2 TX on the board)
- *   CN3-5/6      Relay 3 (PA15) switches the lamp, high = on
+ *   U16-3  PA3   BTN3 timer +5 s   (USART2 RX on the board)
+ *   U16-4  PA2   BTN4 timer -5 s   (USART2 TX on the board)
+ *   CN3-1/2      Relay 1 (PB5) switches the lamp, high = on
  *
  * Buttons close to GND (U16-17/18); the internal pull-ups are used.
  * The board devicetree is left untouched; everything showcase specific is here.
@@ -27,24 +27,24 @@
 		};
 		btn_timer_up: btn_timer_up {
 			gpios = <&gpioa 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-			label = "Timer +1 h";
+			label = "Timer +5 s";
 		};
 		btn_timer_down: btn_timer_down {
 			gpios = <&gpioa 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-			label = "Timer -1 h";
+			label = "Timer -5 s";
 		};
 	};
 
 	/* Aliases of the course drivers (driver_gpio, driver_bh1750) */
 	aliases {
-		/* Lamp switched by Relay 3 (PA15, high = contact closed):
-		 * supply (+) -> CN3-5 COM3, CN3-6 OUT3 -> lamp -> supply (-) */
-		out0 = &relay_3;
+		/* Lamp switched by Relay 1 (PB5, high = contact closed):
+		 * supply (+) -> CN3-1 COM1, CN3-2 OUT1 -> lamp -> supply (-) */
+		out0 = &relay_1;
 		out1 = &user_led;         /* LED LIFE (PA8), heartbeat */
 		in0 = &user_btn;          /* BTN1 lamp ON/OFF */
 		in1 = &btn_mode;          /* BTN2 AUTO/MANUAL */
-		in2 = &btn_timer_up;      /* BTN3 timer +1 h  */
-		in3 = &btn_timer_down;    /* BTN4 timer -1 h  */
+		in2 = &btn_timer_up;      /* BTN3 timer +5 s  */
+		in3 = &btn_timer_down;    /* BTN4 timer -5 s  */
 		light0 = &bh1750;
 	};
 };

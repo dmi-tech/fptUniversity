@@ -1,6 +1,6 @@
 # Hướng dẫn SmartLighting
 
-Firmware SmartLighting 1.0.0 cho Base Board STM32H573RI (Zephyr + MCUboot).
+Firmware SmartLighting 1.1.0 cho Base Board STM32H573RI (Zephyr + MCUboot).
 
 ## 1. Showcase làm gì
 
@@ -9,8 +9,11 @@ Firmware SmartLighting 1.0.0 cho Base Board STM32H573RI (Zephyr + MCUboot).
 - Đo ánh sáng bằng BH1750 mỗi giây. Đèn bật khi trời tối đủ lâu và tắt khi
   trời sáng đủ lâu, nên không chập chờn lúc chạng vạng hay khi có bóng râm,
   đèn xe.
-- Bật / tắt tay bằng nút hoặc trang web; hẹn giờ tắt 0-12 giờ.
-- Ngưỡng sáng / tối và thời gian xác nhận chỉnh được trên web, lưu lại khi
+- Bật / tắt tay bằng nút hoặc trang web; hẹn giờ tắt theo bước 5 giây.
+- Giờ yên lặng (ví dụ 23:00-05:00, lấy giờ qua Internet): ở AUTO đèn tắt.
+- Cảm biến lỗi: ở AUTO đèn bật (mặc định), giữ nguyên hoặc tắt; vẫn bật /
+  tắt tay được.
+- Ngưỡng sáng / tối, thời gian xác nhận, chế độ và trạng thái đèn lưu lại khi
   mất điện.
 - Hiển thị trên LCD 20x4, điều khiển qua trang web, gửi dữ liệu lên MQTT.
 
@@ -35,15 +38,15 @@ Tắt nguồn board trước khi đấu dây.
 | -------- | ------------- | ------------- |
 | BH1750 | VCC / GND / SDA / SCL | U16-1 (5 V) / U16-17 (GND) / U16-9 / U16-10 |
 | LCD 20x4 | VCC / GND / SDA / SCL | U16-2 / U16-18 / U16-9 / U16-10 (chung với BH1750) |
-| Đèn (qua Relay 3) | | nguồn (+) → CN3-5, CN3-6 → đèn (+), đèn (−) → nguồn (−) |
+| Đèn (qua Relay 1) | | nguồn (+) → CN3-1, CN3-2 → đèn (+), đèn (−) → nguồn (−) |
 | BTN1 bật / tắt đèn | | U16-12 và GND |
 | BTN2 AUTO / MANUAL | | U16-11 và GND |
-| BTN3 / BTN4 hẹn giờ +1 h / −1 h | | U16-3 / U16-4 và GND |
+| BTN3 / BTN4 hẹn giờ +5 s / −5 s | | U16-3 / U16-4 và GND |
 | Ethernet, nguồn | | RJ45, jack DC 24 V |
 
 Lưu ý:
 - Đặt BH1750 nơi đèn không chiếu thẳng vào (ví dụ hướng ra cửa sổ).
-- Relay 3 chỉ dùng cho đèn điện áp thấp (≤ 24 V DC). Đèn 220 V cần relay /
+- Relay 1 chỉ dùng cho đèn điện áp thấp (≤ 24 V DC). Đèn 220 V cần relay /
   contactor ngoài đúng định mức.
 
 ## 4. Cài đặt, build và nạp
@@ -120,25 +123,43 @@ UART5 (U16-19 / U16-20, 115200).
 | --- | --------- |
 | BTN1 | bật / tắt đèn (chuyển sang MANUAL) |
 | BTN2 | đổi AUTO / MANUAL |
-| BTN3 / BTN4 | hẹn giờ tắt +1 giờ / −1 giờ (0 = không hẹn) |
+| BTN3 / BTN4 | hẹn giờ tắt +5 giây / −5 giây (0 = không hẹn) |
 
-**AUTO (mặc định):** đèn bật khi ánh sáng dưới 10 lx liên tục 30 giây, tắt
-khi trên 30 lx liên tục 30 giây. Lần đọc đầu tiên sau khi bật nguồn quyết
-định ngay. Firmware tự trừ phần ánh sáng của chính đèn chiếu lên cảm biến.
+**AUTO (mặc định):** đèn bật khi ánh sáng dưới 10 lx liên tục 5 giây, tắt
+khi trên 30 lx liên tục 5 giây (đổi được 5..600 giây trên web). Lần đọc đầu
+tiên sau khi bật nguồn quyết định ngay. Firmware tự trừ phần ánh sáng của
+chính đèn chiếu lên cảm biến.
 
-**MANUAL:** đèn giữ nguyên trạng thái đã bật / tắt bằng tay.
+**MANUAL:** đèn giữ nguyên trạng thái đã bật / tắt bằng tay cho tới lần trời
+chuyển sáng ↔ tối kế tiếp, sau đó board tự về AUTO. Ví dụ tối tắt đèn bằng tay
+thì sáng hôm sau board về AUTO và tối hôm sau đèn lại tự bật.
+
+**Mất điện:** có điện lại, board trở về chế độ trước đó; ở MANUAL đèn trở về
+trạng thái bật / tắt trước đó.
 
 **Hẹn giờ:** tính từ lúc đèn bật, áp dụng cả hai chế độ. Hết giờ đèn tắt; ở
 AUTO đèn chờ tới đêm hôm sau.
 
-**LCD:** dòng 1 IP, dòng 2 độ sáng và Dark / Bright, dòng 3 đèn và chế độ,
-dòng 4 trạng thái MQTT và thời gian hẹn giờ còn lại. Cảm biến lỗi thì LCD
+**Giờ yên lặng:** bật trên web, chọn giờ bắt đầu và kết thúc. Trong khoảng
+này đèn tắt ở AUTO, hết giờ yên lặng mà trời còn tối thì đèn bật lại. Board
+lấy giờ qua Internet (giờ Việt Nam); chưa có giờ thì chức năng này không chạy.
+
+**Cảm biến lỗi:** chọn trên web: đèn bật (mặc định), giữ nguyên hoặc tắt. Nút
+và trang web vẫn bật / tắt đèn được.
+
+Relay đóng / ngắt nhiều nhất một lần mỗi giây; bấm nhanh hơn thì lần sau bị
+bỏ qua.
+
+**LCD:** dòng 1 IP, dòng 2 độ sáng và Dark / Bright, dòng 3 đèn và chế độ
+(QUIET = AUTO trong giờ yên lặng), dòng 4 trạng thái MQTT và thời gian hẹn giờ còn lại. Cảm biến lỗi thì LCD
 xen kẽ màn hình cảnh báo.
 
 **Trang web:** xem độ sáng; bật / tắt đèn, chọn chế độ, hẹn giờ; chỉnh ngưỡng
-sáng / tối và thời gian xác nhận; cấu hình MQTT và mật khẩu.
+sáng / tối, thời gian xác nhận, xử lý khi cảm biến lỗi, giờ yên lặng (kèm giờ
+hiện tại của board); cấu hình MQTT và mật khẩu.
 
-**MQTT:** trạng thái đầy đủ gửi mỗi 30 giây lên
+**MQTT:** trạng thái (đèn bật / tắt, độ sáng lux, chế độ, cảm biến) gửi mỗi
+30 giây lên
 `users/admin@example.com/<NNN>/status` (NNN = số cuối của IP); khi có thay
 đổi, gửi ngay lên `.../lamp`, `.../light`, `.../mode`, `.../sensor`. Thử bằng:
 `mosquitto_sub -h <broker> -t 'users/#' -v`.
@@ -149,7 +170,7 @@ sáng / tối và thời gian xác nhận; cấu hình MQTT và mật khẩu.
 | ---------- | ---------- |
 | LCD sáng nhưng không có chữ | vặn biến trở độ tương phản trên module I2C |
 | LCD báo lỗi cảm biến BH1750 | kiểm tra dây SDA / SCL (chung với LCD) và nguồn |
-| Đèn không bật | kiểm tra nguồn 24 V của board và nguồn đèn đã vào COM3 |
+| Đèn không bật | kiểm tra nguồn 24 V của board và nguồn đèn đã vào COM1 (CN3-1) |
 | Đèn bật / tắt liên tục | cảm biến đang bị đèn chiếu thẳng: đổi vị trí, hoặc tăng ngưỡng tắt trên web |
 | Không mở được trang web | máy tính phải cùng mạng với board; thử IP 192.168.1.100 |
 | LCD báo `MQTT: N/A` | kiểm tra thông tin broker trên web và cáp mạng |

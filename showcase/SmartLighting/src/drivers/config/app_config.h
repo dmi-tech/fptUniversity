@@ -48,10 +48,18 @@ typedef struct {
 } app_config_t;
 
 extern app_config_t g_cfg;
+/* Where config_load() found g_cfg: "slot A", "slot B (A: err)" or
+ * "defaults (A: err, B: err)"; err -61 = empty / other layout, -74 = bad CRC */
+extern char g_cfg_source[40];
 
 void config_defaults(app_config_t *cfg);
 int  config_load(app_config_t *cfg);
 int  config_save(const app_config_t *cfg);
+
+/* g_cfg is changed and saved by several threads (web, main, ...): hold this
+ * lock while changing it, and while copying it for config_save() */
+void config_lock(void);
+void config_unlock(void);
 
 /* Utility: convert 4-byte IP to "a.b.c.d" string */
 void ip4_to_str(const uint8_t ip[4], char out[16]);

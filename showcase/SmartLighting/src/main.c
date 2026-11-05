@@ -24,7 +24,8 @@ struct state    g_st;
 struct settings g_set;
 uint32_t        g_events;
 
-const char *const src_str[] = { "", "auto", "button", "web", "timer" };
+const char *const src_str[]   = { "", "auto", "button", "web", "timer", "restore" };
+const char *const fault_str[] = { "keep", "on", "off" };
 
 K_MSGQ_DEFINE(g_cmdq, sizeof(struct cmd), 8, 4);
 
@@ -58,22 +59,27 @@ static void handle_cmd(const struct cmd *c, int64_t now)
         lamp_set_mode((enum mode)c->val, now);
         break;
     case CMD_TIMER_STEP:
-        g_set.timer_h = (uint8_t)CLAMP((int)g_set.timer_h + c->val, 0, SET_TIMER_MAX);
+        g_set.timer_s = (uint16_t)CLAMP((int)g_set.timer_s + c->val * SET_TIMER_STEP_S,
+                                        0, SET_TIMER_MAX_S);
         settings_save_at(now + SAVE_DELAY_MS);   /* fewer writes on repeated clicks */
         g_events |= BIT(DEV_LAMP);
-        printk("[BTN] timer %u h\n", g_set.timer_h);
+        printk("[BTN] timer %u s\n", g_set.timer_s);
         break;
     case CMD_TIMER_SET:
-        g_set.timer_h = (uint8_t)c->val;
+        g_set.timer_s = (uint16_t)c->val;
         settings_save_at(now);
         g_events |= BIT(DEV_LAMP);
         break;
     case CMD_SETTINGS:
-        g_set.on_lux    = c->set.on_lux;
-        g_set.off_lux   = c->set.off_lux;
-        g_set.confirm_s = c->set.confirm_s;
+        g_set.on_lux     = c->set.on_lux;
+        g_set.off_lux    = c->set.off_lux;
+        g_set.confirm_s  = c->set.confirm_s;
+        g_set.fault      = c->set.fault;
+        g_set.quiet_on   = c->set.quiet_on;
+        g_set.quiet_from = c->set.quiet_from;
+        g_set.quiet_to   = c->set.quiet_to;
         settings_save_at(now);
-        g_events |= BIT(DEV_LIGHT);
+        g_events |= BIT(DEV_LIGHT) | BIT(DEV_MODE);
         break;
     }
 }
@@ -129,6 +135,9 @@ int main(void)
     /* Drivers */
     if (driver_bh1750_init() != 0)                   printk("[LIGHT] BH1750 not ready\n");
     if (driver_gpio_out_init(OUT_LAMP) != 0)         printk("[LAMP] relay (out0) not ready\n");
+    k_mutex_lock(&g_lock, K_FOREVER);
+    lamp_restore(k_uptime_get());                    /* mode / lamp before the power cut */
+    k_mutex_unlock(&g_lock);
     for (uint8_t i = IN_BTN_LAMP; i <= IN_BTN_TMR_DOWN; i++) {
         if (driver_gpio_in_init(i, on_button) != 0)  printk("[BTN] in%u not ready\n", i);
     }

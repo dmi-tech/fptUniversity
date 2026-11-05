@@ -5,14 +5,16 @@
  *   GET  /login       → login page HTML
  *   POST /login       → check pw, set cookie, redirect /config
  *   GET  /config      → device config page (auth required)
- *   POST /save        → save config to flash and reboot (auth required)
+ *   POST /save        → save config to flash and reboot (auth required);
+ *                       on a flash error: error page, no reboot
  *   GET  /logout      → clear session, redirect /login
  *   GET  /status      → the MQTT status JSON (mqtt_app_build_status())
  *
  * Live tools on /config (auth required, JSON {"ok":0|1,"msg":"..."}, no reboot):
- *   GET  /api/live      → MQTT state + subscribed messages, and "app": the MQTT
- *                         status JSON of the showcase (the page shows the same
- *                         values as MQTT)
+ *   GET  /api/live      → MQTT state + subscribed messages, and "app": the web
+ *                         status JSON of the showcase (web_app_build_status())
+ *   POST /api/mqtt/connect → mqtt_host=..&mqtt_port=..&mqtt_cid=..&mqtt_user=..&mqtt_pass=..
+ *                         saved to flash, MQTT reconnects at once (no reboot)
  *   POST /api/mqtt/sub  → topic=...         (empty = unsubscribe)
  *   POST /api/mqtt/pub  → topic=...&msg=...
  *   POST /api/...       → the showcase's routes (web_app_api_post())
@@ -226,7 +228,9 @@ static void serve_config(int fd)
     td_ro("Web Port", NULL, port);
     out_str("</tr><tr>");
     web_app_info_cells();
-    out_str("</tr></table></div></div>");
+    out_str("</tr><tr>");
+    td_ro("Config", NULL, g_cfg_source);
+    out_str("<td></td><td></td><td></td><td></td></tr></table></div></div>");
 
     /* MQTT settings + subscribe / publish tools */
     out_str("<div class=\"sec\"><div class=\"st\">MQTT Settings</div><div class=\"sb\"><table>"
@@ -238,9 +242,10 @@ static void serve_config(int fd)
     td_input("Client ID", "text", "mqtt_cid", g_cfg.mqtt_client_id, 1);
     td_input("Username", "text", "mqtt_user", g_cfg.mqtt_user, 1);
     td_input("Password", "password", "mqtt_pass", g_cfg.mqtt_pass, 1);
-    out_str("</tr><tr><td class=\"lb\">Status</td><td colspan=\"5\"><span class=\"ro\" id=\"ms\">");
+    out_str("</tr><tr><td class=\"lb\">Status</td><td colspan=\"4\"><span class=\"ro\" id=\"ms\">");
     out_html(mqtt_app_status());
-    out_str("</span></td></tr>"
+    out_str("</span></td>"
+            "<td><button type=\"button\" class=\"btn\" onclick=\"conn()\">Connect</button></td></tr>"
             "<tr><td colspan=\"6\" class=\"sub\">Subscribe</td></tr>"
             "<tr><td class=\"lb\">Topic</td>"
             "<td colspan=\"3\"><input type=\"text\" id=\"st\" maxlength=\"63\" placeholder=\"e.g. demo/cmd or demo/#\"></td>"
@@ -319,15 +324,33 @@ static void handle_login(int fd, const char *hdr, int hlen)
 /* POST bodies (web thread only) */
 static char s_body[2048];
 
+/* MQTT fields of the form (Save & Apply, Connect) into c */
+static void form_mqtt(const char *body, app_config_t *c)
+{
+    char tmp[128], passbuf[280];
+
+    if (http_form_field(body, "mqtt_host", tmp, sizeof(tmp)))
+        strncpy(c->mqtt_host, tmp, sizeof(c->mqtt_host) - 1);
+    if (http_form_field(body, "mqtt_port", tmp, sizeof(tmp)))
+        c->mqtt_port = (uint16_t)atoi(tmp);
+    if (http_form_field(body, "mqtt_cid", tmp, sizeof(tmp)))
+        strncpy(c->mqtt_client_id, tmp, sizeof(c->mqtt_client_id) - 1);
+    if (http_form_field(body, "mqtt_user", tmp, sizeof(tmp)))
+        strncpy(c->mqtt_user, tmp, sizeof(c->mqtt_user) - 1);
+    if (http_form_field(body, "mqtt_pass", passbuf, sizeof(passbuf)))
+        strncpy(c->mqtt_pass, passbuf, sizeof(c->mqtt_pass) - 1);
+}
+
 static void handle_save(int fd, const char *hdr, int hlen)
 {
     char *body = s_body;
-    char passbuf[280];
     body[0] = '\0';
     http_read_body(fd, hdr, hlen, s_body, sizeof(s_body));
 
     char tmp[128];
     app_config_t nc;
+
+    config_lock();
     memcpy(&nc, &g_cfg, sizeof(nc));
 
     /* IP mode */
@@ -345,16 +368,7 @@ static void handle_save(int fd, const char *hdr, int hlen)
         str_to_ip4(tmp, nc.dns);
 
     /* MQTT */
-    if (http_form_field(body, "mqtt_host", tmp, sizeof(tmp)))
-        strncpy(nc.mqtt_host, tmp, sizeof(nc.mqtt_host) - 1);
-    if (http_form_field(body, "mqtt_port", tmp, sizeof(tmp)))
-        nc.mqtt_port = (uint16_t)atoi(tmp);
-    if (http_form_field(body, "mqtt_cid", tmp, sizeof(tmp)))
-        strncpy(nc.mqtt_client_id, tmp, sizeof(nc.mqtt_client_id) - 1);
-    if (http_form_field(body, "mqtt_user", tmp, sizeof(tmp)))
-        strncpy(nc.mqtt_user, tmp, sizeof(nc.mqtt_user) - 1);
-    if (http_form_field(body, "mqtt_pass", passbuf, sizeof(passbuf)))
-        strncpy(nc.mqtt_pass, passbuf, sizeof(nc.mqtt_pass) - 1);
+    form_mqtt(body, &nc);
 
     /* Password change (only if new_pw == cfm_pw && non-empty) */
     char new_pw[64] = {0}, cfm_pw[64] = {0};
@@ -365,12 +379,17 @@ static void handle_save(int fd, const char *hdr, int hlen)
 
     /* Save */
     int r = config_save(&nc);
-    if (r == 0) {
-        memcpy(&g_cfg, &nc, sizeof(g_cfg));
-        printk("[WEB] Config saved OK\n");
-    } else {
+    if (r == 0) memcpy(&g_cfg, &nc, sizeof(g_cfg));
+    config_unlock();
+    if (r != 0) {
+        char page[sizeof(HTML_SAVE_ERR) + 8];
+        int n = snprintf(page, sizeof(page), HTML_SAVE_ERR, r);
+
         printk("[WEB] Config save ERR: %d\n", r);
+        http_respond(fd, 200, "text/html", page, n, NULL);
+        return;                               /* no reboot: nothing changed */
     }
+    printk("[WEB] Config saved OK\n");
 
     http_respond(fd, 200, "text/html",
                  HTML_SAVED, sizeof(HTML_SAVED) - 1, NULL);
@@ -383,10 +402,12 @@ static void handle_save(int fd, const char *hdr, int hlen)
 /* ── Status JSON of the showcase (web thread only) ───────────── */
 static char s_status[1024];
 
-/* The MQTT status JSON, or NULL before the first reading / if it does not fit */
-static const char *status_json(void)
+/* The MQTT status JSON (web = false) or the page's one (web = true), or NULL
+ * before the first reading / if it does not fit */
+static const char *status_json(bool web)
 {
-    int n = mqtt_app_build_status(s_status, sizeof(s_status));
+    int n = web ? web_app_build_status(s_status, sizeof(s_status))
+                : mqtt_app_build_status(s_status, sizeof(s_status));
 
     return (n > 0 && n < (int)sizeof(s_status)) ? s_status : NULL;
 }
@@ -394,7 +415,7 @@ static const char *status_json(void)
 /* ── Handle GET /status (JSON) ───────────────────────────────── */
 static void handle_status(int fd)
 {
-    const char *js = status_json();
+    const char *js = status_json(false);
 
     if (!js) js = "{}";
     http_respond(fd, 200, "application/json", js, strlen(js), NULL);
@@ -439,10 +460,38 @@ static void api_live(int fd)
         out_str("}");
     }
     out_str("],\"app\":");
-    const char *js = status_json();
+    const char *js = status_json(true);
     out_str(js ? js : "null");
     out_str("}");
     out_end();
+}
+
+/* Connect: save the MQTT settings and reconnect now (no reboot). On a flash
+ * error the new settings are still used until the next reboot. */
+static void api_mqtt_connect(int fd, const char *body)
+{
+    char tmp[8], msg[64];
+    app_config_t nc;
+    int port;
+
+    if (!http_form_field(body, "mqtt_port", tmp, sizeof(tmp)) ||
+        (port = atoi(tmp)) < 1 || port > 65535) {
+        api_reply(fd, false, "port must be 1..65535");
+        return;
+    }
+    config_lock();
+    memcpy(&nc, &g_cfg, sizeof(nc));
+    form_mqtt(body, &nc);
+    int r = config_save(&nc);
+    memcpy(&g_cfg, &nc, sizeof(g_cfg));
+    config_unlock();
+    mqtt_app_reconnect();
+
+    printk("[WEB] MQTT connect %s:%d, saved %s (%d)\n", nc.mqtt_host, port,
+           r == 0 ? "OK" : "ERR", r);
+    if (r == 0) snprintf(msg, sizeof(msg), "saved");
+    else        snprintf(msg, sizeof(msg), "not saved (flash err %d)", r);
+    api_reply(fd, r == 0, msg);
 }
 
 static void api_mqtt_sub(int fd, const char *body)
@@ -482,7 +531,8 @@ static void handle_api_post(int fd, const char *path, const char *hdr, int hlen)
     s_body[0] = '\0';
     http_read_body(fd, hdr, hlen, s_body, sizeof(s_body));
 
-    if      (strcmp(path, "/api/mqtt/sub") == 0) api_mqtt_sub(fd, s_body);
+    if      (strcmp(path, "/api/mqtt/connect") == 0) api_mqtt_connect(fd, s_body);
+    else if (strcmp(path, "/api/mqtt/sub") == 0) api_mqtt_sub(fd, s_body);
     else if (strcmp(path, "/api/mqtt/pub") == 0) api_mqtt_pub(fd, s_body);
     else if (!web_app_api_post(fd, path, s_body)) {
         const char *nf = "Not Found";

@@ -81,16 +81,24 @@ static const char CFG_JS[] =
 "var E=function(i){return document.getElementById(i)};"
 "function p2(n){return(n<10?'0':'')+n}"
 "function hms(s){return p2(Math.floor(s/3600))+':'+p2(Math.floor(s/60)%60)+':'+p2(s%60)}"
-"function fb(i,j){var e=E(i);e.textContent=j.msg||'';e.className='fb '+(j.ok?'ok':'er')}"
+"function fb(i,j){var e=E(i);e.textContent=e.title=j.msg||'';e.className='fb '+(j.ok?'ok':'er')}"
 "function get(r){if(r.status==401){location='/login';throw 0}return r.json()}"
 "function api(u,d,i){fetch(u,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},"
 "body:new URLSearchParams(d).toString()}).then(get).then(function(j){if(i)fb(i,j);poll()})"
 ".catch(function(e){if(e!==0&&i)fb(i,{ok:0,msg:'no response'})})}"
+"function N(n){return document.getElementsByName(n)[0].value}"
+"var msHold=0;"   /* an error of Connect stays in the Status box for 5 s */
+"function conn(){E('ms').textContent='connecting...';"
+"fetch('/api/mqtt/connect',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},"
+"body:new URLSearchParams({mqtt_host:N('mqtt_host'),mqtt_port:N('mqtt_port'),mqtt_cid:N('mqtt_cid'),"
+"mqtt_user:N('mqtt_user'),mqtt_pass:N('mqtt_pass')}).toString()}).then(get)"
+".then(function(j){if(!j.ok){E('ms').textContent=j.msg;msHold=Date.now()+5000}})"
+".catch(function(e){if(e!==0){E('ms').textContent='no response';msHold=Date.now()+5000}})}"
 "function sub(){api('/api/mqtt/sub',{topic:E('st').value},'ss')}"
 "function pub(){api('/api/mqtt/pub',{topic:E('pt').value,msg:E('pm').value},'pf')}"
 "function key(i,f){E(i).addEventListener('keydown',function(e){if(e.key=='Enter'){e.preventDefault();f()}})}"
 "function poll(){fetch('/api/live').then(get).then(function(d){"
-"E('ms').textContent=d.mqtt;"
+"if(Date.now()>msHold)E('ms').textContent=d.mqtt;"
 "if(d.sub){E('sbr').style.display='';var s=E('ss');s.textContent=d.sub_state+': '+d.sub;"
 "s.className='fb '+(d.sub_state=='subscribed'?'ok':'');"
 "var t=d.msgs.map(function(m){return'['+hms(m.t)+'] '+(m.topic!=d.sub?m.topic+': ':'')+m.data.replace(/[\\r\\n]+/g,' ')+(m.cut?' ...':'')});"
@@ -116,5 +124,15 @@ static const char HTML_SAVED[] =
 "<h2>Configuration Saved</h2>"
 "<p>Device is applying settings and will reboot.<br>Redirecting to login in 3 seconds...</p>"
 "</div></body></html>";
+
+/* Error page after a failed save (no reboot); %d = flash error */
+static const char HTML_SAVE_ERR[] =
+"<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Not saved</title>"
+"<style>body{font-family:Arial,sans-serif;background:#eef0f3;display:flex;justify-content:center;align-items:center;height:100vh}"
+".box{background:#fff;border-radius:8px;padding:40px 50px;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.12)}"
+"h2{color:#c00;margin-bottom:8px}p{color:#888;font-size:14px}</style></head><body>"
+"<div class=\"box\"><h2>Configuration NOT saved</h2>"
+"<p>Flash write error %d. Nothing was changed and the device did not reboot.<br>"
+"<a href=\"/config\">Back to the configuration</a></p></div></body></html>";
 
 #endif /* WEB_PAGES_H */

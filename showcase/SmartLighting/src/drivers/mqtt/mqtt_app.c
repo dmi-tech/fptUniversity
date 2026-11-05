@@ -5,6 +5,9 @@
  * and the per-device events to ".../<NNN>/<device>", serves the web page's
  * subscribe / publish tools and auto-reconnects.
  * Only this thread calls the MQTT library; the web thread queues requests.
+ * The broker settings are copied from g_cfg (under config_lock()) before each
+ * connection; mqtt_app_reconnect() drops the session and connects again at
+ * once with the current g_cfg.
  */
 #include "mqtt_app.h"
 #include "app_config.h"
@@ -33,6 +36,17 @@
 
 static const sec_tag_t s_sec_tags[] = { MQTT_CA_SEC_TAG };
 static bool s_ca_loaded;
+
+/* Broker settings of the current connection (copy of g_cfg, MQTT thread) */
+static struct {
+    char     host[sizeof(g_cfg.mqtt_host)];
+    uint16_t port;
+    char     cid[sizeof(g_cfg.mqtt_client_id)];
+    char     user[sizeof(g_cfg.mqtt_user)];
+    char     pass[sizeof(g_cfg.mqtt_pass)];
+} m;
+static atomic_t s_reconnect;          /* web: Connect pressed */
+static K_SEM_DEFINE(s_wake, 0, 1);    /* ends a retry wait early */
 
 static struct mqtt_client   client;
 static struct sockaddr_storage broker;
@@ -236,24 +250,24 @@ static int resolve_broker(void)
 {
     struct zsock_addrinfo hints = { .ai_family = AF_INET, .ai_socktype = SOCK_STREAM };
     struct zsock_addrinfo *res = NULL;
-    int rc = zsock_getaddrinfo(g_cfg.mqtt_host, NULL, &hints, &res);
+    int rc = zsock_getaddrinfo(m.host, NULL, &hints, &res);
     if (rc != 0 || res == NULL) {
-        printk("[MQTT] DNS resolve '%s' failed (%d)\n", g_cfg.mqtt_host, rc);
+        printk("[MQTT] DNS resolve '%s' failed (%d)\n", m.host, rc);
         snprintf(s_status, sizeof(s_status), "dns fail");
         return -1;
     }
     struct sockaddr_in *b = (struct sockaddr_in *)&broker;
     b->sin_family = AF_INET;
-    b->sin_port   = htons(g_cfg.mqtt_port);
+    b->sin_port   = htons(m.port);
     b->sin_addr   = ((struct sockaddr_in *)res->ai_addr)->sin_addr;
     char ips[16];
     net_addr_ntop(AF_INET, &b->sin_addr, ips, sizeof(ips));
-    printk("[MQTT] %s -> %s:%u\n", g_cfg.mqtt_host, ips, g_cfg.mqtt_port);
+    printk("[MQTT] %s -> %s:%u\n", m.host, ips, m.port);
     zsock_freeaddrinfo(res);
     return 0;
 }
 
-static bool use_tls(void) { return g_cfg.mqtt_port == MQTT_TLS_PORT; }
+static bool use_tls(void) { return m.port == MQTT_TLS_PORT; }
 
 static int load_ca(void)
 {
@@ -275,15 +289,15 @@ static void client_setup(void)
     mqtt_client_init(&client);
     client.broker          = &broker;
     client.evt_cb          = mqtt_evt;
-    client.client_id.utf8  = (uint8_t *)g_cfg.mqtt_client_id;
-    client.client_id.size  = strlen(g_cfg.mqtt_client_id);
+    client.client_id.utf8  = (uint8_t *)m.cid;
+    client.client_id.size  = strlen(m.cid);
 
-    s_user.utf8 = (uint8_t *)g_cfg.mqtt_user;
-    s_user.size = strlen(g_cfg.mqtt_user);
-    s_pass.utf8 = (uint8_t *)g_cfg.mqtt_pass;
-    s_pass.size = strlen(g_cfg.mqtt_pass);
-    client.user_name = g_cfg.mqtt_user[0] ? &s_user : NULL;
-    client.password  = g_cfg.mqtt_pass[0] ? &s_pass : NULL;
+    s_user.utf8 = (uint8_t *)m.user;
+    s_user.size = strlen(m.user);
+    s_pass.utf8 = (uint8_t *)m.pass;
+    s_pass.size = strlen(m.pass);
+    client.user_name = m.user[0] ? &s_user : NULL;
+    client.password  = m.pass[0] ? &s_pass : NULL;
 
     client.protocol_version = MQTT_VERSION_3_1_1;
     client.rx_buf           = rx_buf;
@@ -298,7 +312,7 @@ static void client_setup(void)
         tls->cipher_list      = NULL;
         tls->sec_tag_list     = s_sec_tags;
         tls->sec_tag_count    = ARRAY_SIZE(s_sec_tags);
-        tls->hostname         = g_cfg.mqtt_host;   /* SNI + name check */
+        tls->hostname         = m.host;   /* SNI + name check */
     } else {
         client.transport.type = MQTT_TRANSPORT_NON_SECURE;
     }
@@ -422,6 +436,31 @@ static int apply_user_publish(void)
     return rc;
 }
 
+void mqtt_app_reconnect(void)
+{
+    atomic_set(&s_reconnect, 1);
+    k_sem_give(&s_wake);
+}
+
+/* Retry wait, ended early by mqtt_app_reconnect() */
+static void wait_ms(int ms)
+{
+    k_sem_take(&s_wake, K_MSEC(ms));
+}
+
+static void load_broker(void)
+{
+    config_lock();
+    memcpy(m.host, g_cfg.mqtt_host, sizeof(m.host));
+    m.port = g_cfg.mqtt_port;
+    memcpy(m.cid, g_cfg.mqtt_client_id, sizeof(m.cid));
+    memcpy(m.user, g_cfg.mqtt_user, sizeof(m.user));
+    memcpy(m.pass, g_cfg.mqtt_pass, sizeof(m.pass));
+    config_unlock();
+    m.host[sizeof(m.host) - 1] = m.cid[sizeof(m.cid) - 1] = '\0';
+    m.user[sizeof(m.user) - 1] = m.pass[sizeof(m.pass) - 1] = '\0';
+}
+
 static void mqtt_thread(void *a, void *b, void *c)
 {
     ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
@@ -434,29 +473,32 @@ static void mqtt_thread(void *a, void *b, void *c)
 
     while (1) {
         s_connected = false;
+        atomic_clear(&s_reconnect);
+        k_sem_reset(&s_wake);
+        load_broker();
 
         /* No broker configured yet (set it on the /config page) */
-        if (g_cfg.mqtt_host[0] == '\0') {
+        if (m.host[0] == '\0') {
             snprintf(s_status, sizeof(s_status), "not configured");
-            k_msleep(5000);
+            wait_ms(5000);
             continue;
         }
 
-        if (resolve_broker() != 0) { k_msleep(5000); continue; }
+        if (resolve_broker() != 0) { wait_ms(5000); continue; }
 
-        if (use_tls() && load_ca() != 0) { k_msleep(5000); continue; }
+        if (use_tls() && load_ca() != 0) { wait_ms(5000); continue; }
 
         client_setup();
         printk("[MQTT] connecting %s:%u%s as '%s'...\n",
-               g_cfg.mqtt_host, g_cfg.mqtt_port, use_tls() ? " (TLS)" : "",
-               g_cfg.mqtt_client_id);
+               m.host, m.port, use_tls() ? " (TLS)" : "",
+               m.cid);
         snprintf(s_status, sizeof(s_status), "connecting");
 
         int rc = mqtt_connect(&client);
         if (rc != 0) {
             printk("[MQTT] mqtt_connect err %d\n", rc);
             snprintf(s_status, sizeof(s_status), "connect err %d", rc);
-            k_msleep(5000);
+            wait_ms(5000);
             continue;
         }
 
@@ -474,7 +516,7 @@ static void mqtt_thread(void *a, void *b, void *c)
         if (!s_connected) {
             printk("[MQTT] no CONNACK — retrying\n");
             mqtt_abort(&client);
-            k_msleep(5000);
+            wait_ms(5000);
             continue;
         }
 
@@ -487,6 +529,12 @@ static void mqtt_thread(void *a, void *b, void *c)
         /* Connected — service loop (200 ms so web actions feel immediate) */
         atomic_set(&s_pub_now, 1);   /* publish the current state right after CONNACK */
         while (s_connected) {
+            if (atomic_get(&s_reconnect)) {
+                printk("[MQTT] reconnect requested\n");
+                snprintf(s_status, sizeof(s_status), "reconnecting");
+                mqtt_disconnect(&client, NULL);
+                break;
+            }
             /* Cable out: drop the session now instead of waiting for the
              * keepalive, so the status (web, LCD) is right and the
              * reconnect starts as soon as the link is back */
@@ -524,7 +572,7 @@ static void mqtt_thread(void *a, void *b, void *c)
         if (s_sub_want[0]) strcpy(s_sub_state, "waiting for broker");
         k_mutex_unlock(&s_lock);
         mqtt_abort(&client);
-        k_msleep(3000);
+        wait_ms(3000);
     }
 }
 

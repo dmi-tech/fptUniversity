@@ -9,6 +9,11 @@
 #include <stdlib.h>
 
 app_config_t g_cfg;
+char g_cfg_source[40] = "not loaded";
+static K_MUTEX_DEFINE(s_cfg_lock);
+
+void config_lock(void)   { k_mutex_lock(&s_cfg_lock, K_FOREVER); }
+void config_unlock(void) { k_mutex_unlock(&s_cfg_lock); }
 
 /* ── CRC32 (IEEE 802.3 poly) ─────────────────────────────────── */
 static uint32_t crc32_calc(const uint8_t *d, size_t n)
@@ -96,15 +101,21 @@ static int slot_write(uint8_t id, const app_config_t *tmp)
 /* ── Flash load: try slot A, fall back to slot B (rollback) ────── */
 int config_load(app_config_t *cfg)
 {
-    if (slot_read(PARTITION_ID(storage_partition), cfg) == 0) {
+    int ra = slot_read(PARTITION_ID(storage_partition), cfg);
+    if (ra == 0) {
         printk("[CFG] loaded from slot A\n");
+        snprintf(g_cfg_source, sizeof(g_cfg_source), "slot A");
         return 0;
     }
-    printk("[CFG] slot A invalid — trying backup slot B\n");
-    if (slot_read(PARTITION_ID(storage_b_partition), cfg) == 0) {
+    printk("[CFG] slot A invalid (%d) — trying backup slot B\n", ra);
+    int rb = slot_read(PARTITION_ID(storage_b_partition), cfg);
+    if (rb == 0) {
         printk("[CFG] loaded from backup slot B\n");
+        snprintf(g_cfg_source, sizeof(g_cfg_source), "slot B (A: %d)", ra);
         return 0;
     }
+    printk("[CFG] slot B invalid (%d)\n", rb);
+    snprintf(g_cfg_source, sizeof(g_cfg_source), "defaults (A: %d, B: %d)", ra, rb);
     return -ENODATA;
 }
 

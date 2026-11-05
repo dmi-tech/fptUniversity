@@ -52,7 +52,7 @@ bool web_app_api_post(int fd, const char *path, const char *body)
 {
     struct cmd c = { 0 };
     char v[8];
-    unsigned long on, off, cf, h;
+    unsigned long on, off, cf, sec, fa, qo, qf, qt;
 
     if (strcmp(path, "/api/lamp") == 0) {
         if (!http_form_field(body, "on", v, sizeof(v)) || (strcmp(v, "0") && strcmp(v, "1"))) {
@@ -72,26 +72,33 @@ bool web_app_api_post(int fd, const char *path, const char *body)
         c.val = v[0] == 'm' ? MODE_MANUAL : MODE_AUTO;
         reply_post(fd, &c, c.val == MODE_MANUAL ? "mode MANUAL" : "mode AUTO");
     } else if (strcmp(path, "/api/timer") == 0) {
-        if (!form_uint(body, "hours", &h) || h > SET_TIMER_MAX) {
-            web_api_reply(fd, false, "timer must be 0..12 h");
+        if (!form_uint(body, "seconds", &sec) || sec > SET_TIMER_MAX_S) {
+            web_api_reply(fd, false, "timer must be 0..43200 s");
             return true;
         }
         c.type = CMD_TIMER_SET;
-        c.val = (int16_t)h;
-        reply_post(fd, &c, h ? "timer set" : "timer off");
+        c.val = (int32_t)sec;
+        reply_post(fd, &c, sec ? "timer set" : "timer off");
     } else if (strcmp(path, "/api/settings") == 0) {
         struct state st;
         const char *why;
 
         app_snapshot(&st, &c.set);              /* keeps the current timer */
         if (!form_uint(body, "on_lux", &on) || !form_uint(body, "off_lux", &off) ||
-            !form_uint(body, "confirm_s", &cf) || on > 0xFFFF || off > 0xFFFF || cf > 0xFFFF) {
+            !form_uint(body, "confirm_s", &cf) || !form_uint(body, "fault", &fa) ||
+            !form_uint(body, "quiet_on", &qo) || !form_uint(body, "quiet_from", &qf) ||
+            !form_uint(body, "quiet_to", &qt) || on > 0xFFFF || off > 0xFFFF || cf > 0xFFFF ||
+            fa > 0xFF || qo > 0xFF || qf > 0xFFFF || qt > 0xFFFF) {
             web_api_reply(fd, false, "fill in every field");
             return true;
         }
         c.set.on_lux = (uint16_t)on;
         c.set.off_lux = (uint16_t)off;
         c.set.confirm_s = (uint16_t)cf;
+        c.set.fault = (uint8_t)fa;
+        c.set.quiet_on = (uint8_t)qo;
+        c.set.quiet_from = (uint16_t)qf;
+        c.set.quiet_to = (uint16_t)qt;
         why = settings_check(&c.set);
         if (why) {
             web_api_reply(fd, false, why);

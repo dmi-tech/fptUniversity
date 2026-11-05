@@ -1,7 +1,8 @@
-/* settings.c — thresholds, confirm time and off timer, kept in flash in
- * g_cfg.app_data (with their own magic, see app_config.h). Changed on the web
- * page (written at once) or with BTN3 / BTN4 (timer, written SAVE_DELAY_MS
- * after the last click). */
+/* settings.c — thresholds, confirm time, off timer, fault action, quiet
+ * hours, and the mode / MANUAL lamp restored after a power cut, kept in flash
+ * in g_cfg.app_data (with their own magic, see app_config.h). Written at once
+ * from the web page, SAVE_DELAY_MS after the last change from the buttons or
+ * a mode / lamp change (fewer flash writes). */
 #include <zephyr/sys/printk.h>
 #include <string.h>
 
@@ -23,7 +24,11 @@ const char *settings_check(const struct settings *s)
     if (s->off_lux < s->on_lux + SET_LUX_GAP_MIN)     return "off lux must be at least on lux + 5";
     if (s->confirm_s < SET_CONFIRM_MIN || s->confirm_s > SET_CONFIRM_MAX)
         return "confirm time must be 5..600 s";
-    if (s->timer_h > SET_TIMER_MAX)                   return "timer must be 0..12 h";
+    if (s->timer_s > SET_TIMER_MAX_S)                 return "timer must be 0..43200 s";
+    if (s->fault > FAULT_OFF)                         return "fault action must be keep, on or off";
+    if (s->quiet_on > 1 || s->quiet_from >= 24 * 60 || s->quiet_to >= 24 * 60)
+        return "quiet hours must be 00:00..23:59";
+    if (s->mode > MODE_MANUAL || s->lamp > 1)         return "bad mode";
     return NULL;
 }
 
@@ -36,7 +41,11 @@ void settings_load(void)
         g_set = st.s;
         printk("[SET] loaded\n");
     } else {
-        g_set = (struct settings){ SET_ON_LUX_DEF, SET_OFF_LUX_DEF, SET_CONFIRM_S_DEF, 0 };
+        g_set = (struct settings){
+            .on_lux = SET_ON_LUX_DEF, .off_lux = SET_OFF_LUX_DEF, .confirm_s = SET_CONFIRM_S_DEF,
+            .fault = FAULT_ON, .quiet_from = SET_QUIET_FROM_DEF, .quiet_to = SET_QUIET_TO_DEF,
+            .mode = MODE_AUTO,
+        };
         printk("[SET] defaults\n");
     }
 }
@@ -56,9 +65,16 @@ void settings_poll(int64_t now)
     st.s = g_set;
     k_mutex_unlock(&g_lock);
 
+    config_lock();
     memset(g_cfg.app_data, 0, sizeof(g_cfg.app_data));
     memcpy(g_cfg.app_data, &st, sizeof(st));
     int rc = config_save(&g_cfg);      /* both flash copies */
-    printk("[SET] saved (%d): on<%u lx, off>%u lx, %u s, timer %u h\n", rc,
-           st.s.on_lux, st.s.off_lux, st.s.confirm_s, st.s.timer_h);
+    config_unlock();
+    printk("[SET] saved (%d): on<%u lx, off>%u lx, %u s, timer %u s, fault %s, "
+           "quiet %s %02u:%02u-%02u:%02u, %s%s\n", rc,
+           st.s.on_lux, st.s.off_lux, st.s.confirm_s, st.s.timer_s, fault_str[st.s.fault],
+           st.s.quiet_on ? "on" : "off", st.s.quiet_from / 60, st.s.quiet_from % 60,
+           st.s.quiet_to / 60, st.s.quiet_to % 60,
+           st.s.mode == MODE_AUTO ? "auto" : "manual",
+           st.s.mode == MODE_AUTO ? "" : st.s.lamp ? " lamp on" : " lamp off");
 }

@@ -4,10 +4,11 @@
  *   |  Showcase v1.0.0   |  |IP:     192.168.1.50|  |  !!! Warning !!!   |
  *   |   Smart Lighting   |  |Light: 8 lx     Dark|  |                    |
  *   |BH1750 + web server |  |Lamp: ON   Mode:AUTO|  |BH1750 sensor error |
- *   |                    |  |MQTT: OK   Off 05:59|  |                    |
+ *   |                    |  |MQTT: OK   Off 4m05s|  |                    |
  *
- * Row 4 right: "Off hh:mm" left on the timer while the lamp is on, else
- * "Timer 6h" / "Timer off". During a sensor fault the warning and status
+ * Row 3 right: Mode:AUTO, Mode:MAN, or Mode:QUIET (AUTO in the quiet hours).
+ * Row 4 right: "Off 4m05s" left on the timer while the lamp is on, else
+ * "Tmr 30s" / "Timer off". During a sensor fault the warning and status
  * screens take turns, LCD_WARN_SWAP_MS each. driver_lcd_update() writes only
  * the rows that changed. */
 #include <zephyr/sys/printk.h>
@@ -49,12 +50,20 @@ void lcd_view_start(void)
     driver_lcd_update(&s_lcd, rows);
 }
 
+/* Seconds as "45s", "4m05s" or "12h00m" (at most 6 characters) */
+static void fmt_dur(char *buf, size_t len, uint32_t s)
+{
+    if (s < 60)        snprintf(buf, len, "%us", s);
+    else if (s < 3600) snprintf(buf, len, "%um%02us", s / 60, s % 60);
+    else               snprintf(buf, len, "%uh%02um", s / 3600, s % 3600 / 60);
+}
+
 static void build_rows(char rows[LCD_ROWS][DRIVER_LCD_ROW_SIZE], int64_t now)
 {
     static int64_t warn_start;
     struct state st;
     struct settings set;
-    char ip[16], a[24], b[16];
+    char ip[16], a[24], b[20], d[12];
 
     app_snapshot(&st, &set);
 
@@ -82,15 +91,17 @@ static void build_rows(char rows[LCD_ROWS][DRIVER_LCD_ROW_SIZE], int64_t now)
     driver_lcd_fmt_left_right(rows[1], LCD_COLS, a,
                               !st.night_known ? "--" : st.night ? "Dark" : "Bright");
 
-    snprintf(rows[2], DRIVER_LCD_ROW_SIZE, "Lamp: %-3s  Mode:%s", st.on ? "ON" : "OFF",
-             st.mode == MODE_AUTO ? "AUTO" : "MAN");
+    snprintf(a, sizeof(a), "Lamp: %s", st.on ? "ON" : "OFF");
+    driver_lcd_fmt_left_right(rows[2], LCD_COLS, a, st.mode == MODE_MANUAL ? "Mode:MAN"
+                              : st.quiet ? "Mode:QUIET" : "Mode:AUTO");
 
-    int64_t left = set.timer_h * HOUR_MS - (now - st.on_since);
-    if (st.on && set.timer_h && left > 0) {
-        uint32_t m = (uint32_t)((left + 59999) / 60000);
-        snprintf(b, sizeof(b), "Off %02u:%02u", m / 60, m % 60);
-    } else if (set.timer_h) {
-        snprintf(b, sizeof(b), "Timer %uh", set.timer_h);
+    int64_t left = (int64_t)set.timer_s * 1000 - (now - st.on_since);
+    if (st.on && set.timer_s && left > 0) {
+        fmt_dur(d, sizeof(d), (uint32_t)((left + 999) / 1000));
+        snprintf(b, sizeof(b), "Off %s", d);
+    } else if (set.timer_s) {
+        fmt_dur(d, sizeof(d), set.timer_s);
+        snprintf(b, sizeof(b), "Tmr %s", d);
     } else {
         snprintf(b, sizeof(b), "Timer off");
     }

@@ -50,4 +50,5 @@ target_sources(app PRIVATE
   src/lcd_view.c      # LCD thread and screens
   src/status_json.c   # JSON for MQTT and the web page
   src/web_app.c       # web page hooks, /api routes
+  src/clock.c         # local time over SNTP (quiet hours)
 )
