@@ -10,6 +10,8 @@ target_include_directories(app PRIVATE
   src
   ${DRIVER_DIR}/devices/ethernet
   ${DRIVER_DIR}/services/mqtt
+  ${DRIVER_DIR}/peripherals/gpio
+  ${DRIVER_DIR}/devices/dht11
 )
 
 # 2. Các file .c cần biên dịch
@@ -17,4 +19,6 @@ target_sources(app PRIVATE
   src/main.c
   ${DRIVER_DIR}/devices/ethernet/driver_ethernet.c
   ${DRIVER_DIR}/services/mqtt/driver_mqtt.c
+  ${DRIVER_DIR}/peripherals/gpio/driver_gpio.c
+  ${DRIVER_DIR}/devices/dht11/driver_dht11.c
 )

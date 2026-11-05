@@ -7,3 +7,28 @@
 &w5500 {
 	local-mac-address = [00 08 DC 01 02 07];
 };
+
+/ {
+	/* DHT11 DATA on PE0 (U16-8) */
+	dht11: dht11 {
+		compatible = "aosong,dht";
+		dio-gpios = <&gpioe 0 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
+	};
+
+	/* Relay 1 on PB5 */
+	output {
+		compatible = "gpio-leds";
+		relay: relay_1 {
+			gpios = <&gpiob 5 GPIO_ACTIVE_HIGH>;
+			label = "Relay 1 - PB5";
+		};
+	};
+
+	aliases {
+		dht0 = &dht11;
+		out0 = &relay;
+	};
+};
+
+&gpiob { status = "okay"; };
+&gpioe { status = "okay"; };
