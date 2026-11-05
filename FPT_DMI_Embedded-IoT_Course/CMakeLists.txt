@@ -5,17 +5,16 @@ project(FPT_DMI_Embedded-IoT_Course VERSION 1.0.0)
 # Thư mục chứa toàn bộ driver của môn học
 set(DRIVER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/driver)
 
-# 1. Thư mục chứa file .h. Mỗi driver cần thêm thư mục của nó
-#    VÀ thư mục của driver mà nó phụ thuộc (xem README của driver).
+# 1. Thư mục chứa file .h: MQTT cần thêm driver Ethernet
 target_include_directories(app PRIVATE
   src
-  # TODO (Sinh viên): thêm thư mục header của driver, ví dụ:
-  # ${DRIVER_DIR}/peripherals/gpio
+  ${DRIVER_DIR}/devices/ethernet
+  ${DRIVER_DIR}/services/mqtt
 )
 
-# 2. Các file .c cần biên dịch.
+# 2. Các file .c cần biên dịch
 target_sources(app PRIVATE
   src/main.c
-  # TODO (Sinh viên): thêm file .c của driver, ví dụ:
-  # ${DRIVER_DIR}/peripherals/gpio/driver_gpio.c
+  ${DRIVER_DIR}/devices/ethernet/driver_ethernet.c
+  ${DRIVER_DIR}/services/mqtt/driver_mqtt.c
 )
