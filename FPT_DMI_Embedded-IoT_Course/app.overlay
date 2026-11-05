@@ -1,11 +1,13 @@
 /*
- * app.overlay - example MQTT.
+ * app.overlay - example MQTT (DHT11 + Relay 1).
  *
- * SPI1 và chip W5500 đã khai báo sẵn trong file board, chỉ cần đổi địa chỉ MAC.
- * Mỗi board trong cùng mạng phải có MAC KHÁC NHAU: đổi byte cuối theo số thứ tự board (hex).
+ * Used here: SPI1 + W5500 (Ethernet), RNG (network), GPIO for DHT11 and Relay 1.
+ * Everything else the board enables is switched off below.
  */
+
+/* ---- Ethernet: every board on the same network needs its own MAC ---- */
 &w5500 {
-	local-mac-address = [00 08 DC 01 02 07];
+	local-mac-address = [00 08 DC 01 02 07];   /* change the last byte (hex) */
 };
 
 / {
@@ -15,12 +17,12 @@
 		dio-gpios = <&gpioe 0 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
 	};
 
-	/* Relay 1 on PB5 */
+	/* Relay 1 on PC2 (U16-5): output to an external relay module */
 	output {
 		compatible = "gpio-leds";
 		relay: relay_1 {
-			gpios = <&gpiob 5 GPIO_ACTIVE_HIGH>;
-			label = "Relay 1 - PB5";
+			gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;
+			label = "Relay 1 - PC2";
 		};
 	};
 
@@ -30,5 +32,17 @@
 	};
 };
 
-&gpiob { status = "okay"; };
-&gpioe { status = "okay"; };
+&gpioe { status = "okay"; };   /* the board only enables gpioa..gpiod */
+
+/* ---- Not used in this example: switched off ---- */
+&usart1 { status = "disabled"; };   /* PB14/PB15 */
+&usart2 { status = "disabled"; };   /* PA2/PA3 */
+&uart4  { status = "disabled"; };   /* PA0/PA1, RS485 */
+&uart5  { status = "disabled"; };   /* PB12/PB13, only MCUboot logs here */
+&usart6 { status = "disabled"; };   /* PC6/PC7 */
+&fdcan1 { status = "disabled"; };   /* CAN */
+&i2c1   { status = "disabled"; };   /* PB6/PB9, LCD */
+&i2c2   { status = "disabled"; };   /* PB10/PB11 */
+&sht41  { status = "disabled"; };   /* SHT41 on I2C2 */
+&spi2   { status = "disabled"; };   /* PA9/PC1/PC0 */
+&sdmmc1 { status = "disabled"; };   /* SD card */
