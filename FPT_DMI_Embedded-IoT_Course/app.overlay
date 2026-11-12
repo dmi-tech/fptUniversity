@@ -11,3 +11,72 @@
  *  - Một nhãn (label) chỉ được khai báo MỘT lần.
  *  - Hai driver không được dùng chung một chân (driver/README.md mục 3.3).
  */
+
+/* DHT11 DATA -> U16-8 (PE0).
+ * MQ-2 (module LM393, cấp 5 V từ U16-1):
+ *   DO -> U16-5 (PC2), DO = 0 khi nồng độ khí vượt ngưỡng biến trở trên module
+ *   AO -> chia áp 10 kΩ / 20 kΩ -> U16-6 (PC1, ADC1 kênh 11), tối đa 3.33 V
+ * Buzzer ngoài (module active, kích mức cao) -> U16-7 (PC0).
+ * LCD PCF8574 -> I2C1 (U16-10 PB6 SCL, U16-9 PB9 SDA).
+ */
+/ {
+	dht11: dht11 {
+		compatible = "aosong,dht";
+		dio-gpios = <&gpioe 0 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN | GPIO_PULL_UP)>;
+	};
+
+	zephyr,user {
+		lm393-gpios = <&gpioc 2 GPIO_ACTIVE_LOW>;
+		io-channels = <&adc1 11>;
+		io-channel-names = "lm393_0";
+	};
+
+	ext_outputs {
+		compatible = "gpio-leds";
+		ext_buzzer: ext_buzzer {
+			gpios = <&gpioc 0 GPIO_ACTIVE_HIGH>;
+			label = "External buzzer";
+		};
+	};
+
+	aliases {
+		dht0 = &dht11;
+		out0 = &ext_buzzer;
+	};
+};
+
+&gpioe { status = "okay"; };
+
+/* PC0, PC1, PC2 thuộc SPI2 -> tắt SPI2 */
+&spi2 { status = "disabled"; };
+
+&pinctrl {
+	adc1_inp11_pc1: adc1_inp11_pc1 {
+		pinmux = <STM32_PINMUX('C', 1, ANALOG)>;
+	};
+};
+
+&adc1 {
+	clocks = <&rcc STM32_CLOCK(AHB2, 10)>,
+		 <&rcc STM32_SRC_HCLK ADCDAC_SEL(0)>;
+	clock-names = "adcx", "adc_ker";
+	pinctrl-0 = <&adc1_inp11_pc1>;
+	pinctrl-names = "default";
+	st,adc-clock-source = "ASYNC";
+	st,adc-prescaler = <6>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	channel@b {
+		reg = <11>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+};
+
+&i2c1 {
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+};
