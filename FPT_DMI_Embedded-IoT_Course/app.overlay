@@ -11,3 +11,63 @@
  *  - Một nhãn (label) chỉ được khai báo MỘT lần.
  *  - Hai driver không được dùng chung một chân (driver/README.md mục 3.3).
  */
+
+/* LM35 Vout -> U16-3 (PA3, ADC1 kênh 15), cấp nguồn 5 V từ U16-1.
+ * Buzzer ngoài (module active, kích mức cao) -> U16-8 (PE0).
+ * LCD PCF8574 -> I2C1 (U16-10 PB6 SCL, U16-9 PB9 SDA).
+ */
+/ {
+	zephyr,user {
+		io-channels = <&adc1 15>;
+	};
+
+	ext_outputs {
+		compatible = "gpio-leds";
+		ext_buzzer: ext_buzzer {
+			gpios = <&gpioe 0 GPIO_ACTIVE_HIGH>;
+			label = "External buzzer";
+		};
+	};
+
+	aliases {
+		out0 = &ext_buzzer;
+	};
+};
+
+&gpioe { status = "okay"; };
+
+&usart2 { status = "disabled"; };
+
+&pinctrl {
+	adc1_inp15_pa3: adc1_inp15_pa3 {
+		pinmux = <STM32_PINMUX('A', 3, ANALOG)>;
+	};
+};
+
+&adc1 {
+	clocks = <&rcc STM32_CLOCK(AHB2, 10)>,
+		 <&rcc STM32_SRC_HCLK ADCDAC_SEL(0)>;
+	clock-names = "adcx", "adc_ker";
+	pinctrl-0 = <&adc1_inp15_pa3>;
+	pinctrl-names = "default";
+	st,adc-clock-source = "ASYNC";
+	st,adc-prescaler = <6>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	channel@f {
+		reg = <15>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+};
+
+&die_temp { status = "okay"; };
+&vref     { status = "okay"; };
+
+&i2c1 {
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+};
