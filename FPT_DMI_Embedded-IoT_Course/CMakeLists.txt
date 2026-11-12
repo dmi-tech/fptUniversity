@@ -10,12 +10,18 @@ set(DRIVER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/driver)
 target_include_directories(app PRIVATE
   src
   # TODO (Sinh viên): thêm thư mục header của driver, ví dụ:
-  # ${DRIVER_DIR}/peripherals/gpio
+  ${DRIVER_DIR}/peripherals/gpio
+  ${DRIVER_DIR}/peripherals/pwm
+  ${DRIVER_DIR}/devices/hcsr04
+  ${DRIVER_DIR}/devices/servo
 )
 
 # 2. Các file .c cần biên dịch.
 target_sources(app PRIVATE
   src/main.c
   # TODO (Sinh viên): thêm file .c của driver, ví dụ:
-  # ${DRIVER_DIR}/peripherals/gpio/driver_gpio.c
+  ${DRIVER_DIR}/peripherals/gpio/driver_gpio.c
+  ${DRIVER_DIR}/peripherals/pwm/driver_pwm.c
+  ${DRIVER_DIR}/devices/hcsr04/driver_hcsr04.c
+  ${DRIVER_DIR}/devices/servo/driver_servo.c
 )

@@ -11,3 +11,58 @@
  *  - Một nhãn (label) chỉ được khai báo MỘT lần.
  *  - Hai driver không được dùng chung một chân (driver/README.md mục 3.3).
  */
+
+/* HC-SR04 (cấp 5 V từ U16-1): TRIG -> U16-7 (PC0), ECHO -> chia áp 1 kΩ / 2 kΩ -> U16-5 (PC2).
+ * Servo nắp thùng: tín hiệu -> U16-16 (PB14, TIM12_CH1), nguồn 5 V riêng, chung GND.
+ * LED ngoài: U16-8 (PE0) -> 330 Ω -> LED -> GND.
+ */
+/ {
+	hcsr04: hcsr04 {
+		compatible = "hc-sr04";
+		trigger-gpios = <&gpioc 0 GPIO_ACTIVE_HIGH>;
+		echo-gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;
+	};
+
+	servos {
+		compatible = "pwm-leds";
+		servo_a: servo_0 {
+			pwms = <&pwm12 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		};
+	};
+
+	ext_outputs {
+		compatible = "gpio-leds";
+		ext_led: ext_led {
+			gpios = <&gpioe 0 GPIO_ACTIVE_HIGH>;
+			label = "External LED";
+		};
+	};
+
+	aliases {
+		distance0 = &hcsr04;
+		servo0 = &servo_a;
+		out0 = &ext_led;
+	};
+};
+
+&gpioe { status = "okay"; };
+
+/* PC0, PC2 thuộc SPI2; PB14 thuộc USART1 trong board DTS */
+&spi2 { status = "disabled"; };
+&usart1 { status = "disabled"; };
+
+&pinctrl {
+	tim12_ch1_pb14: tim12_ch1_pb14 {
+		pinmux = <STM32_PINMUX('B', 14, AF2)>;
+	};
+};
+
+&timers12 {
+	st,prescaler = <99>;
+	status = "okay";
+	pwm12: pwm {
+		pinctrl-0 = <&tim12_ch1_pb14>;
+		pinctrl-names = "default";
+		status = "okay";
+	};
+};
